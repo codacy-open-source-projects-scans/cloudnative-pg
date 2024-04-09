@@ -1,0 +1,72 @@
+site_name: CloudNativePG
+site_author: The CloudNativePG Contributors
+docs_dir: src
+
+theme: readthedocs
+
+extra_css:
+  - css/override.css
+
+markdown_extensions:
+  - admonition
+  - def_list
+  - attr_list
+
+nav:
+  - index.md
+  - before_you_start.md
+  - use_cases.md
+  - architecture.md
+  - installation_upgrade.md
+  - quickstart.md
+  - image_catalog.md
+  - bootstrap.md
+  - database_import.md
+  - security.md
+  - instance_manager.md
+  - scheduling.md
+  - resource_management.md
+  - failure_modes.md
+  - rolling_update.md
+  - replication.md
+  - backup.md
+  - backup_barmanobjectstore.md
+  - wal_archiving.md
+  - backup_volumesnapshot.md
+  - recovery.md
+  - postgresql_conf.md
+  - declarative_role_management.md
+  - tablespaces.md
+  - operator_conf.md
+  - cluster_conf.md
+  - storage.md
+  - labels_annotations.md
+  - monitoring.md
+  - logging.md
+  - certificates.md
+  - ssl_connections.md
+  - applications.md
+  - connection_pooling.md
+  - replica_cluster.md
+  - kubernetes_upgrade.md
+  - expose_pg_services.md
+  - kubectl-plugin.md
+  - failover.md
+  - troubleshooting.md
+  - fencing.md
+  - declarative_hibernation.md
+  - postgis.md
+  - e2e.md
+  - container_images.md
+  - operator_capability_levels.md
+  - controller.md
+  - samples.md
+  - networking.md
+  - benchmarking.md
+  - commercial_support.md
+  - faq.md
+  - cloudnative-pg.v1.md
+  - supported_releases.md
+  - release_notes.md
+  - Appendixes:
+    - appendixes/object_stores.md
