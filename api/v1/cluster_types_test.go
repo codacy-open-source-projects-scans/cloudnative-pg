@@ -17,11 +17,14 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/stringset"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -452,6 +455,24 @@ var _ = Describe("look up for secrets", func() {
 			Name: "clustername",
 		},
 	}
+
+	// assertServiceNamesPresent returns the first missing service name encountered
+	assertServiceNamesPresent := func(data *stringset.Data, serviceName string) string {
+		assertions := []string{
+			serviceName,
+			fmt.Sprintf("%v.%v", serviceName, cluster.Namespace),
+			fmt.Sprintf("%v.%v.svc", serviceName, cluster.Namespace),
+			fmt.Sprintf("%v.%v.svc.cluster.local", serviceName, cluster.Namespace),
+		}
+		for _, assertion := range assertions {
+			if !data.Has(assertion) {
+				return assertion
+			}
+		}
+
+		return ""
+	}
+
 	It("retrieves client CA secret name", func() {
 		Expect(cluster.GetClientCASecretName()).To(Equal("clustername-ca"))
 	})
@@ -464,8 +485,54 @@ var _ = Describe("look up for secrets", func() {
 	It("retrieves replication secret name", func() {
 		Expect(cluster.GetReplicationSecretName()).To(Equal("clustername-replication"))
 	})
-	It("retrieves all names needed to build a server CA certificate are 9", func() {
-		Expect(cluster.GetClusterAltDNSNames()).To(HaveLen(9))
+	It("retrieves all names needed to build a server CA certificate", func() {
+		names := cluster.GetClusterAltDNSNames()
+		Expect(names).To(HaveLen(12))
+		namesSet := stringset.From(names)
+		Expect(namesSet.Len()).To(Equal(12))
+		Expect(assertServiceNamesPresent(namesSet, cluster.GetServiceReadWriteName())).To(BeEmpty(),
+			"missing service name")
+		Expect(assertServiceNamesPresent(namesSet, cluster.GetServiceReadName())).To(BeEmpty(),
+			"missing service name")
+		Expect(assertServiceNamesPresent(namesSet, cluster.GetServiceReadOnlyName())).To(BeEmpty(),
+			"missing service name")
+	})
+
+	Context("managed services altDnsNames interactions", func() {
+		BeforeEach(func() {
+			cluster.Spec.Managed = &ManagedConfiguration{
+				Services: &ManagedServices{
+					Additional: []ManagedService{
+						{ServiceTemplate: ServiceTemplateSpec{ObjectMeta: Metadata{Name: "one"}}},
+						{ServiceTemplate: ServiceTemplateSpec{ObjectMeta: Metadata{Name: "two"}}},
+					},
+				},
+			}
+		})
+
+		It("should generate correctly the managed services names", func() {
+			namesSet := stringset.From(cluster.GetClusterAltDNSNames())
+			Expect(namesSet.Len()).To(Equal(20))
+			Expect(assertServiceNamesPresent(namesSet, "one")).To(BeEmpty(),
+				"missing service name")
+			Expect(assertServiceNamesPresent(namesSet, "two")).To(BeEmpty(),
+				"missing service name")
+		})
+
+		It("should not generate the default service names if disabled", func() {
+			cluster.Spec.Managed.Services.DisabledDefaultServices = []ServiceSelectorType{
+				ServiceSelectorTypeRO,
+				ServiceSelectorTypeR,
+			}
+			namesSet := stringset.From(cluster.GetClusterAltDNSNames())
+			Expect(namesSet.Len()).To(Equal(12))
+			Expect(namesSet.Has(cluster.GetServiceReadName())).To(BeFalse())
+			Expect(namesSet.Has(cluster.GetServiceReadOnlyName())).To(BeFalse())
+			Expect(assertServiceNamesPresent(namesSet, "one")).To(BeEmpty(),
+				"missing service name")
+			Expect(assertServiceNamesPresent(namesSet, "two")).To(BeEmpty(),
+				"missing service name")
+		})
 	})
 })
 
@@ -781,7 +848,7 @@ var _ = Describe("Barman Endpoint CA for replica cluster", func() {
 		Spec: ClusterSpec{
 			ReplicaCluster: &ReplicaClusterConfiguration{
 				Source:  "testSource",
-				Enabled: true,
+				Enabled: ptr.To(true),
 			},
 		},
 	}
@@ -810,7 +877,7 @@ var _ = Describe("Barman Endpoint CA for replica cluster", func() {
 			},
 			ReplicaCluster: &ReplicaClusterConfiguration{
 				Source:  "testReplica",
-				Enabled: true,
+				Enabled: ptr.To(true),
 			},
 		},
 	}
@@ -1001,7 +1068,7 @@ var _ = Describe("Cluster ShouldRecoveryCreateApplicationDatabase", func() {
 	})
 
 	It("should return false if the cluster is a replica", func() {
-		cluster.Spec.ReplicaCluster = &ReplicaClusterConfiguration{Enabled: true}
+		cluster.Spec.ReplicaCluster = &ReplicaClusterConfiguration{Enabled: ptr.To(true)}
 		result := cluster.ShouldRecoveryCreateApplicationDatabase()
 		Expect(result).To(BeFalse())
 	})
@@ -1231,7 +1298,7 @@ var _ = Describe("ShouldPromoteFromReplicaCluster", func() {
 		cluster := &Cluster{
 			Spec: ClusterSpec{
 				ReplicaCluster: &ReplicaClusterConfiguration{
-					Enabled:        true,
+					Enabled:        ptr.To(true),
 					PromotionToken: "ABC",
 				},
 			},
@@ -1243,7 +1310,7 @@ var _ = Describe("ShouldPromoteFromReplicaCluster", func() {
 		cluster := &Cluster{
 			Spec: ClusterSpec{
 				ReplicaCluster: &ReplicaClusterConfiguration{
-					Enabled: true,
+					Enabled: ptr.To(true),
 				},
 			},
 		}
@@ -1263,7 +1330,7 @@ var _ = Describe("ShouldPromoteFromReplicaCluster", func() {
 		cluster := &Cluster{
 			Spec: ClusterSpec{
 				ReplicaCluster: &ReplicaClusterConfiguration{
-					Enabled:        true,
+					Enabled:        ptr.To(true),
 					PromotionToken: "ABC",
 				},
 			},
@@ -1278,7 +1345,7 @@ var _ = Describe("ShouldPromoteFromReplicaCluster", func() {
 		cluster := &Cluster{
 			Spec: ClusterSpec{
 				ReplicaCluster: &ReplicaClusterConfiguration{
-					Enabled:        true,
+					Enabled:        ptr.To(true),
 					PromotionToken: "ABC",
 				},
 			},
@@ -1287,5 +1354,216 @@ var _ = Describe("ShouldPromoteFromReplicaCluster", func() {
 			},
 		}
 		Expect(cluster.ShouldPromoteFromReplicaCluster()).To(BeTrue())
+	})
+})
+
+var _ = Describe("IsReplica", func() {
+	Describe("using the legacy API", func() {
+		replicaClusterOldAPI := &Cluster{
+			Spec: ClusterSpec{
+				ReplicaCluster: &ReplicaClusterConfiguration{
+					Enabled: ptr.To(true),
+					Source:  "source-cluster",
+				},
+			},
+		}
+
+		primaryClusterOldAPI := &Cluster{
+			Spec: ClusterSpec{
+				ReplicaCluster: nil,
+			},
+		}
+
+		primaryClusterOldAPIExplicit := &Cluster{
+			Spec: ClusterSpec{
+				ReplicaCluster: &ReplicaClusterConfiguration{
+					Enabled: ptr.To(false),
+					Source:  "source-cluster",
+				},
+			},
+		}
+
+		DescribeTable(
+			"doesn't change the semantics",
+			func(resource *Cluster, isReplica bool) {
+				Expect(resource.IsReplica()).To(Equal(isReplica))
+			},
+			Entry(
+				"replica cluster with the old API",
+				replicaClusterOldAPI, true),
+			Entry(
+				"primary cluster with the old API",
+				primaryClusterOldAPI, false),
+			Entry(
+				"primary cluster with the old API, explicitly disabling replica",
+				primaryClusterOldAPIExplicit, false),
+		)
+	})
+
+	Describe("using the new API, with an implicit self", func() {
+		primaryClusterNewAPI := &Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "cluster-1",
+			},
+			Spec: ClusterSpec{
+				ReplicaCluster: &ReplicaClusterConfiguration{
+					Primary: "cluster-1",
+					Enabled: nil,
+					Source:  "source-cluster",
+				},
+			},
+		}
+
+		replicaClusterNewAPI := &Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "cluster-1",
+			},
+			Spec: ClusterSpec{
+				ReplicaCluster: &ReplicaClusterConfiguration{
+					Primary: "cluster-2",
+					Enabled: nil,
+					Source:  "source-cluster",
+				},
+			},
+		}
+
+		DescribeTable(
+			"uses the primary cluster name",
+			func(resource *Cluster, isReplica bool) {
+				Expect(resource.IsReplica()).To(Equal(isReplica))
+			},
+			Entry(
+				"primary cluster",
+				primaryClusterNewAPI, false),
+			Entry(
+				"replica cluster",
+				replicaClusterNewAPI, true),
+		)
+	})
+
+	Describe("using the new API, with an explicit self", func() {
+		primaryClusterNewAPI := &Cluster{
+			Spec: ClusterSpec{
+				ReplicaCluster: &ReplicaClusterConfiguration{
+					Self:    "cluster-1",
+					Primary: "cluster-1",
+					Enabled: nil,
+					Source:  "source-cluster",
+				},
+			},
+		}
+
+		replicaClusterNewAPI := &Cluster{
+			Spec: ClusterSpec{
+				ReplicaCluster: &ReplicaClusterConfiguration{
+					Self:    "cluster-1",
+					Primary: "cluster-2",
+					Enabled: nil,
+					Source:  "source-cluster",
+				},
+			},
+		}
+
+		DescribeTable(
+			"uses the primary cluster name",
+			func(resource *Cluster, isReplica bool) {
+				Expect(resource.IsReplica()).To(Equal(isReplica))
+			},
+			Entry(
+				"primary cluster",
+				primaryClusterNewAPI, false),
+			Entry(
+				"replica cluster",
+				replicaClusterNewAPI, true),
+		)
+	})
+})
+
+var _ = Describe("Cluster Managed Service Enablement", func() {
+	var cluster *Cluster
+
+	BeforeEach(func() {
+		cluster = &Cluster{}
+	})
+
+	Describe("IsReadServiceEnabled", func() {
+		It("should return true if Managed or Services is nil", func() {
+			Expect(cluster.IsReadServiceEnabled()).To(BeTrue())
+
+			cluster.Spec.Managed = &ManagedConfiguration{}
+			Expect(cluster.IsReadServiceEnabled()).To(BeTrue())
+		})
+
+		It("should return true if read service is not in DisabledDefaultServices", func() {
+			cluster.Spec.Managed = &ManagedConfiguration{
+				Services: &ManagedServices{
+					DisabledDefaultServices: []ServiceSelectorType{},
+				},
+			}
+			Expect(cluster.IsReadServiceEnabled()).To(BeTrue())
+		})
+
+		It("should return false if read service is in DisabledDefaultServices", func() {
+			cluster.Spec.Managed = &ManagedConfiguration{
+				Services: &ManagedServices{
+					DisabledDefaultServices: []ServiceSelectorType{ServiceSelectorTypeR},
+				},
+			}
+			Expect(cluster.IsReadServiceEnabled()).To(BeFalse())
+		})
+	})
+
+	Describe("IsReadWriteServiceEnabled", func() {
+		It("should return true if Managed or Services is nil", func() {
+			Expect(cluster.IsReadWriteServiceEnabled()).To(BeTrue())
+
+			cluster.Spec.Managed = &ManagedConfiguration{}
+			Expect(cluster.IsReadWriteServiceEnabled()).To(BeTrue())
+		})
+
+		It("should return true if read-write service is not in DisabledDefaultServices", func() {
+			cluster.Spec.Managed = &ManagedConfiguration{
+				Services: &ManagedServices{
+					DisabledDefaultServices: []ServiceSelectorType{},
+				},
+			}
+			Expect(cluster.IsReadWriteServiceEnabled()).To(BeTrue())
+		})
+
+		It("should return false if read-write service is in DisabledDefaultServices", func() {
+			cluster.Spec.Managed = &ManagedConfiguration{
+				Services: &ManagedServices{
+					DisabledDefaultServices: []ServiceSelectorType{ServiceSelectorTypeRW},
+				},
+			}
+			Expect(cluster.IsReadWriteServiceEnabled()).To(BeFalse())
+		})
+	})
+
+	Describe("IsReadOnlyServiceEnabled", func() {
+		It("should return true if Managed or Services is nil", func() {
+			Expect(cluster.IsReadOnlyServiceEnabled()).To(BeTrue())
+
+			cluster.Spec.Managed = &ManagedConfiguration{}
+			Expect(cluster.IsReadOnlyServiceEnabled()).To(BeTrue())
+		})
+
+		It("should return true if read-only service is not in DisabledDefaultServices", func() {
+			cluster.Spec.Managed = &ManagedConfiguration{
+				Services: &ManagedServices{
+					DisabledDefaultServices: []ServiceSelectorType{},
+				},
+			}
+			Expect(cluster.IsReadOnlyServiceEnabled()).To(BeTrue())
+		})
+
+		It("should return false if read-only service is in DisabledDefaultServices", func() {
+			cluster.Spec.Managed = &ManagedConfiguration{
+				Services: &ManagedServices{
+					DisabledDefaultServices: []ServiceSelectorType{ServiceSelectorTypeRO},
+				},
+			}
+			Expect(cluster.IsReadOnlyServiceEnabled()).To(BeFalse())
+		})
 	})
 })
