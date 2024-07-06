@@ -3193,6 +3193,13 @@ It includes the type of service and its associated template specification.</p>
 Valid values are &quot;rw&quot;, &quot;r&quot;, and &quot;ro&quot;, representing read-write, read, and read-only services.</p>
 </td>
 </tr>
+<tr><td><code>updateStrategy</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-ServiceUpdateStrategy"><i>ServiceUpdateStrategy</i></a>
+</td>
+<td>
+   <p>UpdateStrategy describes how the service differences should be reconciled</p>
+</td>
+</tr>
 <tr><td><code>serviceTemplate</code> <B>[Required]</B><br/>
 <a href="#postgresql-cnpg-io-v1-ServiceTemplateSpec"><i>ServiceTemplateSpec</i></a>
 </td>
@@ -4913,6 +4920,20 @@ More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-
 </tbody>
 </table>
 
+## ServiceUpdateStrategy     {#postgresql-cnpg-io-v1-ServiceUpdateStrategy}
+
+(Alias of `string`)
+
+**Appears in:**
+
+- [ManagedService](#postgresql-cnpg-io-v1-ManagedService)
+
+
+<p>ServiceUpdateStrategy describes how the changes to the managed service should be handled</p>
+
+
+
+
 ## SnapshotOwnerReference     {#postgresql-cnpg-io-v1-SnapshotOwnerReference}
 
 (Alias of `string`)
@@ -5361,6 +5382,24 @@ restored in parallel (when a PostgreSQL standby is fetching WAL
 files from a recovery object store). If not specified, WAL files
 will be processed one at a time. It accepts a positive integer as a
 value - with 1 being the minimum accepted value.</p>
+</td>
+</tr>
+<tr><td><code>additionalCommandArgs</code> <B>[Required]</B><br/>
+<i>[]string</i>
+</td>
+<td>
+   <p>AdditionalCommandArgs represents additional arguments that can be appended
+to the 'barman-cloud-wal-archive' command-line invocation. These arguments
+provide flexibility to customize the backup process further according to
+specific requirements or configurations.</p>
+<p>Example:
+In a scenario where specialized backup options are required, such as setting
+a specific timeout or defining custom behavior, users can use this field
+to specify additional command arguments.</p>
+<p>Note:
+It's essential to ensure that the provided arguments are valid and supported
+by the 'barman-cloud-wal-archive' command, to avoid potential errors or unintended
+behavior during execution.</p>
 </td>
 </tr>
 </tbody>
