@@ -320,6 +320,8 @@ PoolerStatus
 PoolerType
 PostGIS
 PostInitApplicationSQLRefs
+PostInitSQLRefs
+PostInitTemplateSQLRefs
 Postgres
 PostgresConfiguration
 PrimaryUpdateMethod
@@ -370,6 +372,7 @@ SHA
 SLA
 SPoF
 SQLQuery
+SQLRefs
 SSL
 SSZ
 STORAGEACCOUNTNAME
@@ -497,6 +500,7 @@ applicationCredentials
 applicationSecretVersion
 appsv
 appuser
+archiveAdditionalCommandArgs
 archiver
 args
 armru
@@ -999,7 +1003,9 @@ postImportApplicationSQL
 postInitApplicationSQL
 postInitApplicationSQLRefs
 postInitSQL
+postInitSQLRefs
 postInitTemplateSQL
+postInitTemplateSQLRefs
 postgis
 postgres
 postgresGID
@@ -1063,6 +1069,7 @@ resizeInUseVolumes
 resizingPVC
 resourceVersion
 resourcerequirements
+restoreAdditionalCommandArgs
 resync
 retentionPolicy
 reusePVC

@@ -21,3 +21,6 @@ type contextKey string
 
 // ContextKeyCluster is the context key holding cluster data
 const ContextKeyCluster contextKey = "cluster"
+
+// PluginClientKey is the context key holding cluster data
+const PluginClientKey contextKey = "pluginClient"

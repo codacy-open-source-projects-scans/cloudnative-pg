@@ -42,7 +42,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	cnpgiClient "github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/client"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/operatorclient"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/repository"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
@@ -75,16 +77,22 @@ type ClusterReconciler struct {
 	Scheme          *runtime.Scheme
 	Recorder        record.EventRecorder
 	InstanceClient  instance.Client
+	Plugins         repository.Interface
 }
 
 // NewClusterReconciler creates a new ClusterReconciler initializing it
-func NewClusterReconciler(mgr manager.Manager, discoveryClient *discovery.DiscoveryClient) *ClusterReconciler {
+func NewClusterReconciler(
+	mgr manager.Manager,
+	discoveryClient *discovery.DiscoveryClient,
+	plugins repository.Interface,
+) *ClusterReconciler {
 	return &ClusterReconciler{
 		InstanceClient:  instance.NewStatusClient(),
 		DiscoveryClient: discoveryClient,
 		Client:          operatorclient.NewExtendedClient(mgr.GetClient()),
 		Scheme:          mgr.GetScheme(),
 		Recorder:        mgr.GetEventRecorderFor("cloudnative-pg"),
+		Plugins:         plugins,
 	}
 }
 
@@ -142,7 +150,33 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		return ctrl.Result{}, err
 	}
+
 	ctx = cluster.SetInContext(ctx)
+
+	// Load the required plugins
+	pluginClient, err := cnpgiClient.WithPlugins(ctx, r.Plugins, cluster.Spec.Plugins.GetNames()...)
+	if err != nil {
+		var errUnknownPlugin *repository.ErrUnknownPlugin
+		if errors.As(err, &errUnknownPlugin) {
+			return ctrl.Result{
+					RequeueAfter: 10 * time.Second,
+				}, r.RegisterPhase(
+					ctx,
+					cluster,
+					apiv1.PhaseUnknownPlugin,
+					fmt.Sprintf("Unknown plugin %s", errUnknownPlugin.Name),
+				)
+		}
+
+		contextLogger.Error(err, "Error loading plugins, retrying")
+		return ctrl.Result{}, err
+	}
+	defer func() {
+		pluginClient.Close(ctx)
+	}()
+
+	ctx = setPluginClientInContext(ctx, pluginClient)
+
 	// Run the inner reconcile loop. Translate any ErrNextLoop to an errorless return
 	result, err := r.reconcile(ctx, cluster)
 	if errors.Is(err, ErrNextLoop) {
@@ -573,13 +607,17 @@ func (r *ClusterReconciler) reconcileResources(
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	// Delete Pods which have been evicted by the Kubelet
-	result, err := r.deleteEvictedOrUnscheduledInstances(ctx, cluster, resources)
-	if err != nil {
-		contextLogger.Error(err, "While deleting evicted pods")
+	if result, err := r.deleteTerminatedPods(ctx, cluster, resources); err != nil {
+		contextLogger.Error(err, "While deleting terminated pods")
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	} else if result != nil {
+		return *result, nil
 	}
-	if result != nil {
+
+	if result, err := r.processUnschedulableInstances(ctx, cluster, resources); err != nil {
+		contextLogger.Error(err, "While processing unschedulable instances")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	} else if result != nil {
 		return *result, err
 	}
 
@@ -652,7 +690,7 @@ func (r *ClusterReconciler) reconcileResources(
 	}
 
 	// When everything is reconciled, update the status
-	if err = r.RegisterPhase(ctx, cluster, apiv1.PhaseHealthy, ""); err != nil {
+	if err := r.RegisterPhase(ctx, cluster, apiv1.PhaseHealthy, ""); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -661,8 +699,8 @@ func (r *ClusterReconciler) reconcileResources(
 	return ctrl.Result{}, nil
 }
 
-// deleteEvictedOrUnscheduledInstances will delete the Pods that the Kubelet has evicted or cannot schedule
-func (r *ClusterReconciler) deleteEvictedOrUnscheduledInstances(
+// deleteTerminatedPods will delete the Pods that are terminated
+func (r *ClusterReconciler) deleteTerminatedPods(
 	ctx context.Context,
 	cluster *apiv1.Cluster,
 	resources *managedResources,
@@ -671,55 +709,93 @@ func (r *ClusterReconciler) deleteEvictedOrUnscheduledInstances(
 	deletedPods := false
 
 	for idx := range resources.instances.Items {
-		instance := &resources.instances.Items[idx]
+		pod := &resources.instances.Items[idx]
 
-		// we process unscheduled pod only if we are in IsNodeMaintenanceWindow, and we can delete the PVC Group
-		// This will be better handled in a next patch
-		if !utils.IsPodEvicted(instance) && !(utils.IsPodUnscheduled(instance) &&
-			cluster.IsNodeMaintenanceWindowInProgress() &&
-			!cluster.IsReusePVCEnabled()) {
+		if pod.GetDeletionTimestamp() != nil {
 			continue
 		}
-		contextLogger.Warning("Deleting evicted/unscheduled pod",
-			"pod", instance.Name,
-			"podStatus", instance.Status)
-		if err := r.Delete(ctx, instance); err != nil {
-			if apierrs.IsConflict(err) {
-				contextLogger.Debug("Conflict error while deleting instances item", "error", err)
-				return &ctrl.Result{Requeue: true}, nil
-			}
+
+		if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+			continue
+		}
+
+		contextLogger.Info(
+			"Deleting terminated pod",
+			"podName", pod.Name,
+			"phase", pod.Status.Phase,
+		)
+		if err := r.Delete(ctx, pod); err != nil && !apierrs.IsNotFound(err) {
 			return nil, err
 		}
 		deletedPods = true
 
-		r.Recorder.Eventf(cluster, "Normal", "DeletePod",
-			"Deleted evicted/unscheduled Pod %v",
-			instance.Name)
+		r.Recorder.Eventf(cluster,
+			"Normal",
+			"DeletePod",
+			"Deleted '%s' pod: '%v'", pod.Status.Phase, pod.Name)
+	}
 
-		// we never delete the pvc unless we are in node Maintenance Window and the Reuse PVC is false
+	if deletedPods {
+		// We deleted objects. Give time to the informer cache to notice that.
+		return &ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+
+	return nil, nil
+}
+
+// processUnschedulableInstances will delete the Pods that cannot schedule
+func (r *ClusterReconciler) processUnschedulableInstances(
+	ctx context.Context,
+	cluster *apiv1.Cluster,
+	resources *managedResources,
+) (*ctrl.Result, error) {
+	contextLogger := log.FromContext(ctx)
+	for idx := range resources.instances.Items {
+		pod := &resources.instances.Items[idx]
+
+		if pod.GetDeletionTimestamp() != nil {
+			continue
+		}
+
+		if !utils.IsPodUnschedulable(pod) {
+			continue
+		}
+
+		if podRollout := isPodNeedingRollout(ctx, pod, cluster); podRollout.required {
+			return &ctrl.Result{RequeueAfter: 1 * time.Second},
+				r.upgradePod(ctx, cluster, pod, fmt.Sprintf("recreating unschedulable pod: %s", podRollout.reason))
+		}
+
 		if !cluster.IsNodeMaintenanceWindowInProgress() || cluster.IsReusePVCEnabled() {
 			continue
 		}
+
+		contextLogger.Warning("Deleting unschedulable pod", "pod", pod.Name, "podStatus", pod.Status)
+		if err := r.Delete(ctx, pod); err != nil && !apierrs.IsNotFound(err) {
+			return nil, err
+		}
+
+		r.Recorder.Eventf(cluster, "Normal", "DeletePod",
+			"Deleted unschedulable pod %v",
+			pod.Name)
 
 		if err := persistentvolumeclaim.EnsureInstancePVCGroupIsDeleted(
 			ctx,
 			r.Client,
 			cluster,
-			instance.Name,
-			instance.Namespace,
+			pod.Name,
+			pod.Namespace,
 		); err != nil {
 			return nil, err
 		}
 		r.Recorder.Eventf(cluster, "Normal", "DeletePVCs",
-			"Deleted evicted/unscheduled Pod %v PVCs",
-			instance.Name)
-	}
+			"Deleted unschedulable pod %v PVCs",
+			pod.Name)
 
-	if deletedPods {
-		// We cleaned up Pods which were evicted.
-		// Let's wait for the informer cache to notice that
+		// We deleted the pod and the PVCGroup. Give time to the informer cache to notice that.
 		return &ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
+
 	return nil, nil
 }
 
