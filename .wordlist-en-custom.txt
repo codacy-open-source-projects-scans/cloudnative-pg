@@ -59,6 +59,8 @@ CRDs
 CSI
 CSV
 CSVs
+CVE
+CVEs
 CannotReconcile
 Canovai
 CatalogImage
@@ -81,6 +83,7 @@ ClusterIP
 ClusterImageCatalog
 ClusterIsNotReady
 ClusterList
+ClusterMonitoringTLSConfiguration
 ClusterRole
 ClusterRole's
 ClusterServiceVersion
@@ -249,6 +252,7 @@ NodeSelector
 NodesUsed
 Noland
 O'Reilly
+OLAP
 OLTP
 OOM
 OU
@@ -699,6 +703,7 @@ ecdsa
 edb
 eks
 enableAlterSystem
+enableMetricsTLS
 enablePDB
 enablePodAntiAffinity
 enablePodMonitor
