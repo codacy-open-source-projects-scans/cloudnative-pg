@@ -35,6 +35,34 @@ create and synchronize a PostgreSQL cluster from an existing source cluster
 using the replica cluster feature — described in this section. The source can
 be a primary cluster or another replica cluster (cascading replication).
 
+### About PostgreSQL Roles
+
+A replica cluster operates in continuous recovery mode, meaning no changes to
+the database, including the catalog and global objects like roles or databases,
+are permitted. These changes are deferred until the `Cluster` transitions to
+primary. During this phase, global objects such as roles remain as defined in
+the source cluster. CloudNativePG applies any local redefinitions once the
+cluster is promoted.
+
+If you are not planning to promote the cluster (e.g., for read-only workloads)
+or if you intend to detach completely from the source cluster
+once the replica cluster is promoted, you don't need to take any action.
+This is normally the case of the ["Standalone Replica Cluster"](replica_cluster.md#standalone-replica-clusters).
+
+If you are planning to promote the cluster at some point, CloudNativePG will
+manage the following roles and passwords when transitioning from replica
+cluster to primary:
+
+- the application user
+- the superuser (if you are using it)
+- any role defined using the [declarative interface](declarative_role_management.md)
+
+
+If your intention is to seamlessly ensure that the above roles and passwords
+don't change, you need to define the necessary secrets for the above in each
+`Cluster`.
+This is normally the case of the ["Distributed Topology"](replica_cluster.md#distributed-topology).
+
 ### Bootstrapping a Replica Cluster
 
 The first step is to bootstrap the replica cluster using one of the following
@@ -215,7 +243,12 @@ involving:
 - Demotion of a primary cluster to a replica cluster
 - Promotion of a replica cluster to a primary cluster
 
-These processes are described below.
+These processes are described in the next sections.
+
+!!! Important
+    Before you proceed, ensure you review the ["About PostgreSQL Roles" section](#about-postgresql-roles)
+    above and use identical role definitions, including secrets, in all
+    `Cluster` objects participating in the distributed topology.
 
 ### Demoting a Primary to a Replica Cluster
 
@@ -264,6 +297,9 @@ To proceed with promoting the other cluster, you need to retrieve the
 kubectl get cluster cluster-eu-south \
   -o jsonpath='{.status.demotionToken}'
 ```
+
+You can obtain the `demotionToken` using the `cnpg` plugin by checking the
+cluster's status. The token is listed under the `Demotion token` section.
 
 !!! Note
     The `demotionToken` obtained from `cluster-eu-south` will serve as the
@@ -393,6 +429,13 @@ Note the `bootstrap` and `replica` sections pointing to the source cluster.
     source: cluster-example
 ```
 
+The previous configuration assumes that the application database and its owning
+user are set to the default, `app`. If the PostgreSQL cluster being restored
+uses different names, you must specify them as documented in [Configure the application database](bootstrap.md#configure-the-application-database).
+You should also consider copying over the application user secret from
+the original cluster and keep it synchronized with the source.
+See ["About PostgreSQL Roles"](#about-postgresql-roles) for more details.
+
 In the `externalClusters` section, remember to use the right namespace for the
 host in the `connectionParameters` sub-section.
 The `-replication` and `-ca` secrets should have been copied over if necessary,
@@ -439,6 +482,13 @@ Note the `bootstrap` and `replica` sections pointing to the source cluster.
     source: cluster-example
 ```
 
+The previous configuration assumes that the application database and its owning
+user are set to the default, `app`. If the PostgreSQL cluster being restored
+uses different names, you must specify them as documented in [Configure the application database](recovery.md#configure-the-application-database).
+You should also consider copying over the application user secret from
+the original cluster and keep it synchronized with the source.
+See ["About PostgreSQL Roles"](#about-postgresql-roles) for more details.
+
 In the `externalClusters` section, take care to use the right namespace in the
 `endpointURL` and the `connectionParameters.host`.
 And do ensure that the necessary secrets have been copied if necessary, and that
@@ -482,33 +532,48 @@ store to fetch the WAL files.
 You can check the [sample YAML](samples/cluster-example-replica-from-volume-snapshot.yaml)
 for it in the `samples/` subdirectory.
 
-<!--
+The example assumes that the application database and its owning
+user are set to the default, `app`. If the PostgreSQL cluster being restored
+uses different names, you must specify them as documented in [Configure the
+application database](recovery.md#configure-the-application-database).
+You should also consider copying over the application user secret from
+the original cluster and keep it synchronized with the source.
+See ["About PostgreSQL Roles"](#about-postgresql-roles) for more details.
+
 ## Delayed replicas
 
-In addition to standard replica clusters, our system supports the creation of
-**delayed replicas** through the utilization of PostgreSQL's
-[`recovery_min_apply_delay`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-RECOVERY-MIN-APPLY-DELAY)
-option.
+CloudNativePG supports the creation of **delayed replicas** through the
+[`.spec.replica.minApplyDelay` option](cloudnative-pg.v1.md#postgresql-cnpg-io-v1-ReplicaClusterConfiguration),
+leveraging PostgreSQL's
+[`recovery_min_apply_delay`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-RECOVERY-MIN-APPLY-DELAY).
 
-Delayed replicas intentionally lag behind the primary database by a specified
-amount of time. This delay is configurable using the `recovery_min_apply_delay`
-option in PostgreSQL. The primary objective of introducing delayed replicas is
-to mitigate the impact of unintentional executions of SQL statements on the
-primary database. This is particularly useful in scenarios where an incorrect
-or missing `WHERE` clause is used in operations such as `UPDATE` or `DELETE`.
+Delayed replicas are designed to intentionally lag behind the primary database
+by a specified amount of time. This delay is configurable using the
+`.spec.replica.minApplyDelay` option, which maps to the underlying
+`recovery_min_apply_delay` parameter in PostgreSQL.
 
-To introduce a delay in a replica cluster, adjust the
-`recovery_min_apply_delay` option. This parameter determines the time by which
-replicas lag behind the primary. For example:
+The primary objective of delayed replicas is to mitigate the impact of
+unintended SQL statement executions on the primary database. This is especially
+useful in scenarios where operations such as `UPDATE` or `DELETE` are performed
+without a proper `WHERE` clause.
+
+To configure a delay in a replica cluster, adjust the
+`.spec.replica.minApplyDelay` option. This parameter determines how much time
+the replicas will lag behind the primary. For example:
 
 ```yaml
   # ...
-  postgresql:
-    parameters:
-      # Enforce a delay of 8 hours
-      recovery_min_apply_delay = '8h'
+  replica:
+    enabled: true
+    source: cluster-example
+    # Enforce a delay of 8 hours
+    minApplyDelay: '8h'
   # ...
 ```
+
+The above example helps safeguard against accidental data modifications by
+providing a buffer period of 8 hours to detect and correct issues before they
+propagate to the replicas.
 
 Monitor and adjust the delay as needed based on your recovery time objectives
 and the potential impact of unintended primary database operations.
@@ -526,6 +591,10 @@ The main use cases of delayed replicas can be summarized into:
    buffer that provides an opportunity to intervene and prevent the propagation of
    undesirable changes.
 
+!!! Warning
+    The `minApplyDelay` option of delayed replicas cannot be used in
+    conjunction with `promotionToken`.
+
 By integrating delayed replicas into your replication strategy, you can enhance
 the resilience and data protection capabilities of your PostgreSQL environment.
 Adjust the delay duration based on your specific needs and the criticality of
@@ -536,4 +605,3 @@ your data.
     efficient to rely on volume snapshot-based recovery for faster outcomes.
     Evaluate and choose the approach that best aligns with your unique requirements
     and infrastructure.
--->

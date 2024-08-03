@@ -367,6 +367,7 @@ RunningBackups
 RunningSnapshotBackups
 RuntimeDefault
 Ruocco
+SANs
 SAS
 SCC
 SCCs
@@ -421,6 +422,8 @@ SwitchReplicaClusterStatus
 SyncReplicaElectionConstraints
 SynchronizeReplicas
 SynchronizeReplicasConfiguration
+SynchronousReplicaConfiguration
+SynchronousReplicaConfigurationMethod
 Synopsys
 TCP
 TLS
@@ -884,6 +887,7 @@ matchExpressions
 matchLabels
 maxClientConnections
 maxParallel
+maxStandbyNamesFromCluster
 maxSyncReplicas
 maxwait
 mcache
@@ -896,6 +900,7 @@ metricNameKS
 microservice
 microservices
 microsoft
+minApplyDelay
 minSyncReplicas
 minikube
 minio
@@ -1045,6 +1050,7 @@ quantile
 queryable
 quickstart
 rbac
+rc
 readService
 readinessProbe
 readthedocs
@@ -1056,6 +1062,7 @@ recoveredCluster
 recoveryTarget
 recoverytarget
 recv
+redefinitions
 redhat
 rehydrate
 rehydrated
@@ -1155,6 +1162,8 @@ sslkey
 sslmode
 sslrootcert
 sso
+standbyNamesPost
+standbyNamesPre
 startDelay
 startedAt
 stateful
@@ -1241,6 +1250,8 @@ unencrypted
 unfence
 unfencing
 unix
+unsatisfiable
+unschedulable
 unsetting
 unusablePVC
 updateInterval

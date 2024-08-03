@@ -20,25 +20,32 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"text/template"
+	"time"
 )
 
 // WalLevelValue a value that is assigned to the 'wal_level' configuration field
 type WalLevelValue string
 
-// ParameterWalLevel the configuration key containing the wal_level value
-const ParameterWalLevel = "wal_level"
+const (
+	// ParameterWalLevel the configuration key containing the wal_level value
+	ParameterWalLevel = "wal_level"
 
-// ParameterMaxWalSenders the configuration key containing the max_wal_senders value
-const ParameterMaxWalSenders = "max_wal_senders"
+	// ParameterMaxWalSenders the configuration key containing the max_wal_senders value
+	ParameterMaxWalSenders = "max_wal_senders"
 
-// ParameterArchiveMode the configuration key containing the archive_mode value
-const ParameterArchiveMode = "archive_mode"
+	// ParameterArchiveMode the configuration key containing the archive_mode value
+	ParameterArchiveMode = "archive_mode"
 
-// ParameterWalLogHints the configuration key containing the wal_log_hints value
-const ParameterWalLogHints = "wal_log_hints"
+	// ParameterWalLogHints the configuration key containing the wal_log_hints value
+	ParameterWalLogHints = "wal_log_hints"
+
+	// ParameterRecoveyMinApplyDelay is the configuration key containing the recovery_min_apply_delay parameter
+	ParameterRecoveyMinApplyDelay = "recovery_min_apply_delay"
+)
 
 // An acceptable wal_level value
 const (
@@ -279,11 +286,9 @@ type ConfigurationInfo struct {
 	// The list of user-level settings
 	UserSettings map[string]string
 
-	// The list of replicas
-	SyncReplicasElectable []string
+	// The synchronous_standby_names configuration to be applied
+	SynchronousStandbyNames string
 
-	// The number of desired number of synchronous replicas
-	SyncReplicas int
 	// List of additional sharedPreloadLibraries to be loaded
 	AdditionalSharedPreloadLibraries []string
 
@@ -312,6 +317,9 @@ type ConfigurationInfo struct {
 
 	// IsAlterSystemEnabled is true when 'allow_alter_system' should be set to on
 	IsAlterSystemEnabled bool
+
+	// Minimum apply delay of transaction
+	RecoveryMinApplyDelay time.Duration
 }
 
 // getAlterSystemEnabledValue returns a config compatible value for IsAlterSystemEnabled
@@ -653,8 +661,31 @@ func CreatePostgresqlConfiguration(info ConfigurationInfo) *PgConfiguration {
 		configuration.OverwriteConfig("archive_mode", "on")
 	}
 
-	// Apply the list of replicas
-	setReplicasListConfigurations(info, configuration)
+	// Apply the synchronous replication settings
+	syncStandbyNames := info.SynchronousStandbyNames
+	if len(syncStandbyNames) > 0 {
+		configuration.OverwriteConfig(SynchronousStandbyNames, syncStandbyNames)
+	}
+
+	if info.ClusterName != "" {
+		configuration.OverwriteConfig("cluster_name", info.ClusterName)
+	}
+
+	// Apply the replication delay
+	if info.RecoveryMinApplyDelay != 0 {
+		// We set recovery_min_apply_delay on every instance
+		// of a replica cluster and not just on the primary.
+		// PostgreSQL will look at the difference between the
+		// current timestamp and the timestamp when the commit
+		// was created (by the primary instance).
+		//
+		// Since both timestamps are the same on the designed
+		// primary and on the replicas, setting it on both
+		// is a safe approach.
+		configuration.OverwriteConfig(
+			ParameterRecoveyMinApplyDelay,
+			fmt.Sprintf("%vs", math.Floor(info.RecoveryMinApplyDelay.Seconds())))
+	}
 
 	if info.IncludingSharedPreloadLibraries {
 		// Set all managed shared preload libraries
@@ -726,25 +757,6 @@ func setUserSharedPreloadLibraries(info ConfigurationInfo, configuration *PgConf
 	}
 }
 
-// setReplicasListConfigurations sets the standby node list
-func setReplicasListConfigurations(info ConfigurationInfo, configuration *PgConfiguration) {
-	if info.SyncReplicasElectable != nil && info.SyncReplicas > 0 {
-		escapedReplicas := make([]string, len(info.SyncReplicasElectable))
-		for idx, name := range info.SyncReplicasElectable {
-			escapedReplicas[idx] = escapePostgresConfLiteral(name)
-		}
-		configuration.OverwriteConfig(SynchronousStandbyNames, fmt.Sprintf(
-			"ANY %v (%v)",
-			info.SyncReplicas,
-			strings.Join(escapedReplicas, ",")))
-	}
-
-	if info.ClusterName != "" {
-		// Apply the cluster name
-		configuration.OverwriteConfig("cluster_name", info.ClusterName)
-	}
-}
-
 // CreatePostgresqlConfFile creates the contents of the postgresql.conf file
 func CreatePostgresqlConfFile(configuration *PgConfiguration) (string, string) {
 	// We need to be able to compare two configurations generated
@@ -771,10 +783,4 @@ func CreatePostgresqlConfFile(configuration *PgConfiguration) (string, string) {
 // directly embeddable in the PostgreSQL configuration file
 func escapePostgresConfValue(value string) string {
 	return fmt.Sprintf("'%v'", strings.ReplaceAll(value, "'", "''"))
-}
-
-// escapePostgresLiteral escapes a value to make its representation
-// similar to the literals in PostgreSQL
-func escapePostgresConfLiteral(value string) string {
-	return fmt.Sprintf("\"%v\"", strings.ReplaceAll(value, "\"", "\"\""))
 }

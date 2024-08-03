@@ -102,7 +102,7 @@ Additionally, the community provides images for the [PostGIS extension](postgis.
 * Online import of existing PostgreSQL databases, including major upgrades of PostgreSQL, through PostgreSQL native logical replication (imperative, via the `cnpg` plugin)
 * Fencing of an entire PostgreSQL cluster, or a subset of the instances in a declarative way
 * Hibernation of a PostgreSQL cluster in a declarative way
-* Support for Synchronous Replicas
+* Support for quorum-based and priority-based Synchronous Replication
 * Support for HA physical replication slots at cluster level
 * Synchronization of user defined physical replication slots
 * Backup from a standby
@@ -114,9 +114,7 @@ Additionally, the community provides images for the [PostGIS extension](postgis.
 * Replica clusters for PostgreSQL distributed topologies spanning multiple
   Kubernetes clusters, enabling private, public, hybrid, and multi-cloud
   architectures with support for controlled switchover.
-  <!--
 * Delayed Replica clusters
--->
 * Connection pooling with PgBouncer
 * Support for node affinity via `nodeSelector`
 * Native customizable exporter of user defined metrics for Prometheus through the `metrics` port (9187)

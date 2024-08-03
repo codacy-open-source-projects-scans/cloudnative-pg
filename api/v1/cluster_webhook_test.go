@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	storagesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -1967,54 +1968,74 @@ var _ = Describe("primary update strategy", func() {
 })
 
 var _ = Describe("Number of synchronous replicas", func() {
-	It("should be a positive integer", func() {
-		cluster := Cluster{
-			Spec: ClusterSpec{
-				Instances:       3,
-				MaxSyncReplicas: -3,
-			},
-		}
-		Expect(cluster.validateMaxSyncReplicas()).ToNot(BeEmpty())
+	Context("new-style configuration", func() {
+		It("can't have both new-style configuration and legacy one", func() {
+			cluster := Cluster{
+				Spec: ClusterSpec{
+					Instances:       3,
+					MinSyncReplicas: 1,
+					MaxSyncReplicas: 2,
+					PostgresConfiguration: PostgresConfiguration{
+						Synchronous: &SynchronousReplicaConfiguration{
+							Number: 2,
+						},
+					},
+				},
+			}
+			Expect(cluster.validateConfiguration()).ToNot(BeEmpty())
+		})
 	})
 
-	It("should not be equal than the number of replicas", func() {
-		cluster := Cluster{
-			Spec: ClusterSpec{
-				Instances:       3,
-				MaxSyncReplicas: 3,
-			},
-		}
-		Expect(cluster.validateMaxSyncReplicas()).ToNot(BeEmpty())
-	})
+	Context("legacy configuration", func() {
+		It("should be a positive integer", func() {
+			cluster := Cluster{
+				Spec: ClusterSpec{
+					Instances:       3,
+					MaxSyncReplicas: -3,
+				},
+			}
+			Expect(cluster.validateMaxSyncReplicas()).ToNot(BeEmpty())
+		})
 
-	It("should not be greater than the number of replicas", func() {
-		cluster := Cluster{
-			Spec: ClusterSpec{
-				Instances:       3,
-				MaxSyncReplicas: 5,
-			},
-		}
-		Expect(cluster.validateMaxSyncReplicas()).ToNot(BeEmpty())
-	})
+		It("should not be equal than the number of replicas", func() {
+			cluster := Cluster{
+				Spec: ClusterSpec{
+					Instances:       3,
+					MaxSyncReplicas: 3,
+				},
+			}
+			Expect(cluster.validateMaxSyncReplicas()).ToNot(BeEmpty())
+		})
 
-	It("can be zero", func() {
-		cluster := Cluster{
-			Spec: ClusterSpec{
-				Instances:       3,
-				MaxSyncReplicas: 0,
-			},
-		}
-		Expect(cluster.validateMaxSyncReplicas()).To(BeEmpty())
-	})
+		It("should not be greater than the number of replicas", func() {
+			cluster := Cluster{
+				Spec: ClusterSpec{
+					Instances:       3,
+					MaxSyncReplicas: 5,
+				},
+			}
+			Expect(cluster.validateMaxSyncReplicas()).ToNot(BeEmpty())
+		})
 
-	It("can be lower than the number of replicas", func() {
-		cluster := Cluster{
-			Spec: ClusterSpec{
-				Instances:       3,
-				MaxSyncReplicas: 2,
-			},
-		}
-		Expect(cluster.validateMaxSyncReplicas()).To(BeEmpty())
+		It("can be zero", func() {
+			cluster := Cluster{
+				Spec: ClusterSpec{
+					Instances:       3,
+					MaxSyncReplicas: 0,
+				},
+			}
+			Expect(cluster.validateMaxSyncReplicas()).To(BeEmpty())
+		})
+
+		It("can be lower than the number of replicas", func() {
+			cluster := Cluster{
+				Spec: ClusterSpec{
+					Instances:       3,
+					MaxSyncReplicas: 2,
+				},
+			}
+			Expect(cluster.validateMaxSyncReplicas()).To(BeEmpty())
+		})
 	})
 })
 
@@ -2766,6 +2787,36 @@ var _ = Describe("promotion token validation", func() {
 					Self:           "test2",
 					Source:         "test",
 					PromotionToken: base64.StdEncoding.EncodeToString(jsonToken),
+				},
+			},
+		}
+
+		result := cluster.validatePromotionToken()
+		Expect(result).NotTo(BeEmpty())
+	})
+
+	It("complains it the token is set when minApplyDelay is being used", func() {
+		tokenContent := utils.PgControldataTokenContent{
+			LatestCheckpointTimelineID:   "1",
+			REDOWALFile:                  "0000000100000001000000A1",
+			DatabaseSystemIdentifier:     "231231212",
+			LatestCheckpointREDOLocation: "0/1000000",
+			TimeOfLatestCheckpoint:       "we don't know",
+			OperatorVersion:              "version info",
+		}
+		jsonToken, err := json.Marshal(tokenContent)
+		Expect(err).ToNot(HaveOccurred())
+
+		cluster := &Cluster{
+			Spec: ClusterSpec{
+				ReplicaCluster: &ReplicaClusterConfiguration{
+					Primary:        "test",
+					Self:           "test",
+					Source:         "test",
+					PromotionToken: base64.StdEncoding.EncodeToString(jsonToken),
+					MinApplyDelay: &metav1.Duration{
+						Duration: 1 * time.Hour,
+					},
 				},
 			},
 		}

@@ -32,6 +32,7 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/constants"
 	postgresutils "github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/utils"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres/replication"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 )
 
@@ -434,6 +435,7 @@ func createPostgresqlConfiguration(cluster *apiv1.Cluster, preserveUserSettings 
 		IsReplicaCluster:                 cluster.IsReplica(),
 		IsWalArchivingDisabled:           utils.IsWalArchivingDisabled(&cluster.ObjectMeta),
 		IsAlterSystemEnabled:             cluster.Spec.PostgresConfiguration.EnableAlterSystem,
+		SynchronousStandbyNames:          replication.GetSynchronousStandbyNames(cluster),
 	}
 
 	if preserveUserSettings {
@@ -441,14 +443,6 @@ func createPostgresqlConfiguration(cluster *apiv1.Cluster, preserveUserSettings 
 	} else {
 		info.IncludingMandatory = true
 	}
-
-	// Compute the actual number of sync replicas
-	syncReplicas, electable := cluster.GetSyncReplicasData()
-	info.SyncReplicas = syncReplicas
-	info.SyncReplicasElectable = electable
-
-	// Ensure a consistent ordering to avoid spurious configuration changes
-	sort.Strings(info.SyncReplicasElectable)
 
 	// Set cluster name
 	info.ClusterName = cluster.Name
@@ -460,6 +454,11 @@ func createPostgresqlConfiguration(cluster *apiv1.Cluster, preserveUserSettings 
 		}
 	}
 	sort.Strings(info.TemporaryTablespaces)
+
+	// Setup minimum replay delay if we're on a replica cluster
+	if cluster.IsReplica() && cluster.Spec.ReplicaCluster.MinApplyDelay != nil {
+		info.RecoveryMinApplyDelay = cluster.Spec.ReplicaCluster.MinApplyDelay.Duration
+	}
 
 	conf, sha256 := postgres.CreatePostgresqlConfFile(postgres.CreatePostgresqlConfiguration(info))
 	return conf, sha256, nil
