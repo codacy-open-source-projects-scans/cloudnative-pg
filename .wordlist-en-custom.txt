@@ -2,6 +2,8 @@ AES
 API's
 APIs
 ARMv
+AZ
+AZs
 AcolumnName
 AdditionalCommandArgs
 AdditionalPodAffinity
@@ -405,6 +407,7 @@ ServiceSelectorType
 ServiceSpec
 ServiceTemplateSpec
 ServiceUpdateStrategy
+SetStatusInCluster
 ShutdownCheckpointToken
 Silvela
 Slonik
