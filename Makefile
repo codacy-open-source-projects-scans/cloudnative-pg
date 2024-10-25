@@ -41,14 +41,14 @@ LOCALBIN ?= $(shell pwd)/bin
 
 BUILD_IMAGE ?= true
 POSTGRES_IMAGE_NAME ?= $(shell grep 'DefaultImageName.*=' "pkg/versions/versions.go" | cut -f 2 -d \")
-KUSTOMIZE_VERSION ?= v5.4.3
+KUSTOMIZE_VERSION ?= v5.5.0
 CONTROLLER_TOOLS_VERSION ?= v0.16.4
 GORELEASER_VERSION ?= v2.3.2
-SPELLCHECK_VERSION ?= 0.43.0
+SPELLCHECK_VERSION ?= 0.43.1
 WOKE_VERSION ?= 0.19.0
 OPERATOR_SDK_VERSION ?= v1.37.0
 OPM_VERSION ?= v1.47.0
-PREFLIGHT_VERSION ?= 1.10.1
+PREFLIGHT_VERSION ?= 1.10.2
 OPENSHIFT_VERSIONS ?= v4.12-v4.17
 ARCH ?= amd64
 
@@ -101,7 +101,13 @@ test: generate fmt vet manifests envtest ## Run tests.
 	source <(${ENVTEST} use -p env --bin-dir ${ENVTEST_ASSETS_DIR} ${ENVTEST_K8S_VERSION}) ;\
 	export KUBEBUILDER_CONTROLPLANE_STOP_TIMEOUT=60s ;\
 	export KUBEBUILDER_CONTROLPLANE_START_TIMEOUT=60s ;\
-	go test -coverpkg=./... --count=1 -coverprofile=cover.out ./api/... ./cmd/... ./internal/... ./pkg/... ./tests/utils ;
+	go test -coverpkg=./... -coverprofile=cover.out ./api/... ./cmd/... ./internal/... ./pkg/... ./tests/utils
+
+test-race: generate fmt vet manifests envtest ## Run tests enabling race detection.
+	mkdir -p ${ENVTEST_ASSETS_DIR} ;\
+	source <(${ENVTEST} use -p env --bin-dir ${ENVTEST_ASSETS_DIR} ${ENVTEST_K8S_VERSION}) ;\
+	go run github.com/onsi/ginkgo/v2/ginkgo -r -p --skip-package=e2e \
+	  --race --keep-going --fail-on-empty --randomize-all --randomize-suites
 
 e2e-test-kind: ## Run e2e tests locally using kind.
 	hack/e2e/run-e2e-kind.sh

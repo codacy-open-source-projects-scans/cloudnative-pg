@@ -17,8 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"path"
@@ -36,9 +34,9 @@ import (
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils/logs"
 	"github.com/cloudnative-pg/cloudnative-pg/tests"
 	testUtils "github.com/cloudnative-pg/cloudnative-pg/tests/utils"
+	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/minio"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -78,19 +76,6 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 		})
 		cluster, err = env.GetCluster(namespace, clusterName)
 		Expect(err).ToNot(HaveOccurred())
-
-		clusterLogs := logs.ClusterStreamingRequest{
-			Cluster: cluster,
-			Options: &corev1.PodLogOptions{
-				Follow: true,
-			},
-		}
-		var buffer bytes.Buffer
-		go func() {
-			defer GinkgoRecover()
-			err = clusterLogs.SingleStream(context.TODO(), &buffer)
-			Expect(err).ToNot(HaveOccurred())
-		}()
 	}
 
 	Context("on a new cluster with tablespaces", Ordered, func() {
@@ -109,7 +94,16 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 			Expect(err).ToNot(HaveOccurred())
 
 			// We create the MinIO credentials required to login into the system
-			AssertStorageCredentialsAreCreated(namespace, "backup-storage-creds", "minio", "minio123")
+			By("creating the credentials for minio", func() {
+				_, err = testUtils.CreateObjectStorageSecret(
+					namespace,
+					"backup-storage-creds",
+					"minio",
+					"minio123",
+					env,
+				)
+				Expect(err).ToNot(HaveOccurred())
+			})
 
 			By("create the certificates for MinIO", func() {
 				err := minioEnv.CreateCaSecret(env, namespace)
@@ -168,8 +162,9 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 			Expect(err).ToNot(HaveOccurred())
 
 			By(fmt.Sprintf("creating backup %s and verifying backup is ready", backupName), func() {
-				testUtils.ExecuteBackup(namespace, clusterBackupManifest, false, testTimeouts[testUtils.BackupIsReady], env)
-				AssertBackupConditionInClusterStatus(namespace, clusterName)
+				testUtils.ExecuteBackup(namespace, clusterBackupManifest, false, testTimeouts[testUtils.BackupIsReady],
+					env)
+				testUtils.AssertBackupConditionInClusterStatus(env, namespace, clusterName)
 			})
 
 			By("verifying the number of tars in minio", func() {
@@ -270,7 +265,7 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 				// This should be better handled inside ExecuteBackup
 				AssertArchiveWalOnMinio(namespace, clusterName, clusterName)
 
-				AssertBackupConditionInClusterStatus(namespace, clusterName)
+				testUtils.AssertBackupConditionInClusterStatus(env, namespace, clusterName)
 			})
 
 			By("verifying the number of tars in the latest base backup", func() {
@@ -361,7 +356,6 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 			tablespace2           = "tbs2"
 			table2                = "test_tbs2"
 		)
-		checkPointTimeout := time.Second * 10
 
 		BeforeAll(func() {
 			// Create a cluster in a namespace we'll delete after the test
@@ -369,7 +363,16 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 			Expect(err).ToNot(HaveOccurred())
 
 			// We create the required credentials for MinIO
-			AssertStorageCredentialsAreCreated(namespace, "backup-storage-creds", "minio", "minio123")
+			By("creating the credentials for minio", func() {
+				_, err = testUtils.CreateObjectStorageSecret(
+					namespace,
+					"backup-storage-creds",
+					"minio",
+					"minio123",
+					env,
+				)
+				Expect(err).ToNot(HaveOccurred())
+			})
 
 			By("create the certificates for MinIO", func() {
 				err := minioEnv.CreateCaSecret(env, namespace)
@@ -397,7 +400,7 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 					testTimeouts[testUtils.VolumeSnapshotIsReady],
 					env,
 				)
-				AssertBackupConditionInClusterStatus(namespace, clusterName)
+				testUtils.AssertBackupConditionInClusterStatus(env, namespace, clusterName)
 			})
 
 			By("checking that volumeSnapshots are properly labeled", func() {
@@ -418,26 +421,34 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 			By("inserting test data and creating WALs on the cluster to be snapshotted", func() {
 				// Create a table and insert data 1,2 in each tablespace
 				tl1 := TableLocator{
-					Namespace:   namespace,
-					ClusterName: clusterName,
-					TableName:   table1,
-					Tablespace:  tablespace1,
+					Namespace:    namespace,
+					ClusterName:  clusterName,
+					DatabaseName: testUtils.AppDBName,
+					TableName:    table1,
+					Tablespace:   tablespace1,
 				}
-				AssertCreateTestDataInTablespace(env, tl1)
+				AssertCreateTestData(env, tl1)
 				tl2 := TableLocator{
-					Namespace:   namespace,
-					ClusterName: clusterName,
-					TableName:   table2,
-					Tablespace:  tablespace2,
+					Namespace:    namespace,
+					ClusterName:  clusterName,
+					DatabaseName: testUtils.AppDBName,
+					TableName:    table2,
+					Tablespace:   tablespace2,
 				}
-				AssertCreateTestDataInTablespace(env, tl2)
+				AssertCreateTestData(env, tl2)
 
 				primaryPod, err := env.GetClusterPrimary(namespace, clusterName)
 				Expect(err).ToNot(HaveOccurred())
 				// Execute a checkpoint
-				_, _, err = env.EventuallyExecCommand(
-					env.Ctx, *primaryPod, specs.PostgresContainerName, &checkPointTimeout,
-					"psql", "-U", "postgres", "-tAc", "CHECKPOINT")
+				_, _, err = env.EventuallyExecQueryInInstancePod(
+					testUtils.PodLocator{
+						Namespace: primaryPod.Namespace,
+						PodName:   primaryPod.Name,
+					}, testUtils.PostgresDBName,
+					"CHECKPOINT",
+					RetryTimeout,
+					PollingTime,
+				)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -510,8 +521,20 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 				})
 
 				By("verifying the correct data exists in the restored cluster", func() {
-					AssertDataExpectedCount(env, namespace, clusterToRestoreName, table1, 2)
-					AssertDataExpectedCount(env, namespace, clusterToRestoreName, table2, 2)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToRestoreName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    table1,
+					}
+					AssertDataExpectedCount(env, tableLocator, 2)
+					tableLocator = TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToRestoreName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    table2,
+					}
+					AssertDataExpectedCount(env, tableLocator, 2)
 				})
 			})
 
@@ -526,6 +549,7 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 						apiv1.ApplicationUserSecretSuffix,
 					)
 					defer func() {
+						_ = conn.Close()
 						forward.Close()
 					}()
 					Expect(err).ToNot(HaveOccurred())
@@ -590,8 +614,20 @@ var _ = Describe("Tablespaces tests", Label(tests.LabelTablespaces,
 				})
 
 				By("verifying the correct data exists in the restored cluster", func() {
-					AssertDataExpectedCount(env, namespace, clusterToPITRName, table1, 4)
-					AssertDataExpectedCount(env, namespace, clusterToPITRName, table2, 4)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToPITRName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    table1,
+					}
+					AssertDataExpectedCount(env, tableLocator, 4)
+					tableLocator = TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToPITRName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    table2,
+					}
+					AssertDataExpectedCount(env, tableLocator, 4)
 				})
 			})
 	})
@@ -1004,7 +1040,7 @@ func AssertDatabaseContainsTablespaces(cluster *apiv1.Cluster, timeout int) {
 					testUtils.PodLocator{
 						Namespace: namespace,
 						PodName:   instance.Name,
-					}, testUtils.DatabaseName("app"),
+					}, testUtils.AppDBName,
 					"SELECT oid, spcname, pg_get_userbyid(spcowner) FROM pg_tablespace;",
 				)
 				g.Expect(stdErr).To(BeEmpty())
@@ -1032,7 +1068,7 @@ func AssertTempTablespaceContent(cluster *apiv1.Cluster, timeout int, content st
 				testUtils.PodLocator{
 					Namespace: namespace,
 					PodName:   primary.Name,
-				}, testUtils.DatabaseName("app"),
+				}, testUtils.AppDBName,
 				"SHOW temp_tablespaces",
 			)
 			g.Expect(stdErr).To(BeEmpty())
@@ -1057,7 +1093,7 @@ func AssertTempTablespaceBehavior(cluster *apiv1.Cluster, expectedTempTablespace
 			testUtils.PodLocator{
 				Namespace: namespace,
 				PodName:   primary.Name,
-			}, testUtils.DatabaseName("app"),
+			}, testUtils.AppDBName,
 			"CREATE TEMPORARY TABLE cnp_e2e_test_table (i INTEGER); "+
 				"SELECT spcname FROM pg_tablespace WHERE OID="+
 				"(SELECT reltablespace FROM pg_class WHERE oid = 'cnp_e2e_test_table'::regclass)",
@@ -1079,7 +1115,7 @@ func AssertTablespaceAndOwnerExist(cluster *apiv1.Cluster, tablespace, owner str
 		testUtils.PodLocator{
 			Namespace: namespace,
 			PodName:   primaryPod.Name,
-		}, testUtils.DatabaseName("app"),
+		}, testUtils.AppDBName,
 		fmt.Sprintf("SELECT 1 FROM pg_tablespace WHERE spcname = '%s' AND pg_get_userbyid(spcowner) = '%s';",
 			tablespace,
 			owner),
@@ -1182,7 +1218,7 @@ func latestBaseBackupContainsExpectedTars(
 		// we list the backup.info files to get the listing of base backups
 		// directories in minio
 		backupInfoFiles := filepath.Join("*", clusterName, "base", "*", "*.info")
-		ls, err := testUtils.ListFilesOnMinio(minioEnv, backupInfoFiles)
+		ls, err := minio.ListFiles(minioEnv, backupInfoFiles)
 		g.Expect(err).ShouldNot(HaveOccurred())
 		frags := strings.Split(ls, "\n")
 		slices.Sort(frags)
@@ -1190,10 +1226,10 @@ func latestBaseBackupContainsExpectedTars(
 		g.Expect(frags).To(HaveLen(numBackups), report)
 		latestBaseBackup := filepath.Dir(frags[numBackups-1])
 		tarsInLastBackup := strings.TrimPrefix(filepath.Join(latestBaseBackup, "*.tar"), "minio/")
-		listing, err := testUtils.ListFilesOnMinio(minioEnv, tarsInLastBackup)
+		listing, err := minio.ListFiles(minioEnv, tarsInLastBackup)
 		g.Expect(err).ShouldNot(HaveOccurred())
 		report += fmt.Sprintf("tar listing:\n%s\n", listing)
-		numTars, err := testUtils.CountFilesOnMinio(minioEnv, tarsInLastBackup)
+		numTars, err := minio.CountFiles(minioEnv, tarsInLastBackup)
 		g.Expect(err).ShouldNot(HaveOccurred())
 		g.Expect(numTars).To(Equal(expectedTars), report)
 	}, 120).Should(Succeed())

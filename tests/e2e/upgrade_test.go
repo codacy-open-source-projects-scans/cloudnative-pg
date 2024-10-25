@@ -35,9 +35,9 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 	"github.com/cloudnative-pg/cloudnative-pg/tests"
 	testsUtils "github.com/cloudnative-pg/cloudnative-pg/tests/utils"
+	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/minio"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -146,11 +146,11 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 	// but a single scheduled backups during the check
 	AssertScheduledBackupsAreScheduled := func(serverName string) {
 		By("verifying scheduled backups are still happening", func() {
-			latestTar := minioPath(serverName, "data.tar.gz")
-			currentBackups, err := testsUtils.CountFilesOnMinio(minioEnv, latestTar)
+			latestTar := minio.GetFilePath(serverName, "data.tar.gz")
+			currentBackups, err := minio.CountFiles(minioEnv, latestTar)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(func() (int, error) {
-				return testsUtils.CountFilesOnMinio(minioEnv, latestTar)
+				return minio.CountFiles(minioEnv, latestTar)
 			}, 120).Should(BeNumerically(">", currentBackups))
 		})
 	}
@@ -167,6 +167,8 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 	}
 
 	AssertConfUpgrade := func(clusterName, upgradeNamespace string) {
+		databaseName := "appdb"
+
 		By("checking basic functionality performing a configuration upgrade on the cluster", func() {
 			podList, err := env.GetClusterPodList(upgradeNamespace, clusterName)
 			Expect(err).ToNot(HaveOccurred())
@@ -186,12 +188,16 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 			}, 60).ShouldNot(HaveOccurred())
 
 			timeout := 300
-			commandTimeout := time.Second * 10
 			// Check that both parameters have been modified in each pod
 			for _, pod := range podList.Items {
 				Eventually(func() (int, error) {
-					stdout, stderr, err := env.ExecCommand(env.Ctx, pod, specs.PostgresContainerName, &commandTimeout,
-						"psql", "-U", "postgres", "-tAc", "show max_replication_slots")
+					stdout, stderr, err := env.ExecQueryInInstancePod(
+						testsUtils.PodLocator{
+							Namespace: pod.Namespace,
+							PodName:   pod.Name,
+						},
+						testsUtils.PostgresDBName,
+						"show max_replication_slots")
 					if err != nil {
 						return 0, err
 					}
@@ -204,8 +210,13 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 					"Pod %v should have updated its config", pod.Name)
 
 				Eventually(func() (int, error, error) {
-					stdout, _, err := env.ExecCommand(env.Ctx, pod, specs.PostgresContainerName, &commandTimeout,
-						"psql", "-U", "postgres", "-tAc", "show maintenance_work_mem")
+					stdout, _, err := env.ExecQueryInInstancePod(
+						testsUtils.PodLocator{
+							Namespace: pod.Namespace,
+							PodName:   pod.Name,
+						},
+						testsUtils.PostgresDBName,
+						"show maintenance_work_mem")
 					value, atoiErr := strconv.Atoi(strings.Trim(stdout, "MB\n"))
 					return value, err, atoiErr
 				}, timeout).Should(BeEquivalentTo(256),
@@ -235,10 +246,16 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 			primary, err := env.GetClusterPrimary(upgradeNamespace, clusterName)
 			Expect(err).ToNot(HaveOccurred())
 
-			commandTimeout := time.Second * 10
 			query := "CREATE TABLE IF NOT EXISTS postswitch(i int);"
-			_, _, err = env.EventuallyExecCommand(env.Ctx, *primary, specs.PostgresContainerName, &commandTimeout,
-				"psql", "-U", "postgres", "appdb", "-tAc", query)
+			_, _, err = env.EventuallyExecQueryInInstancePod(
+				testsUtils.PodLocator{
+					Namespace: primary.Namespace,
+					PodName:   primary.Name,
+				}, testsUtils.DatabaseName(databaseName),
+				query,
+				RetryTimeout,
+				PollingTime,
+			)
 			Expect(err).ToNot(HaveOccurred())
 
 			for i := 1; i < 4; i++ {
@@ -252,8 +269,13 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 					if err := env.Client.Get(env.Ctx, podNamespacedName, pod); err != nil {
 						return "", err
 					}
-					out, _, err := env.ExecCommand(env.Ctx, *pod, specs.PostgresContainerName,
-						&commandTimeout, "psql", "-U", "postgres", "appdb", "-tAc",
+
+					out, _, err := env.ExecQueryInInstancePod(
+						testsUtils.PodLocator{
+							Namespace: pod.Namespace,
+							PodName:   pod.Name,
+						},
+						testsUtils.DatabaseName(databaseName),
 						"SELECT count(*) = 0 FROM postswitch")
 					return strings.TrimSpace(out), err
 				}, 240).Should(BeEquivalentTo("t"),
@@ -333,7 +355,9 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 	// assertExpectedMatchingPodUIDs checks that the UID of each pod of a Cluster matches with a given list of UIDs.
 	// expectedMatches defines how many times, when comparing the elements of the 2 lists, you are expected to have
 	// common values
-	assertExpectedMatchingPodUIDs := func(namespace, clusterName string, podUIDs []types.UID, expectedMatches int) error {
+	assertExpectedMatchingPodUIDs := func(
+		namespace, clusterName string, podUIDs []types.UID, expectedMatches int,
+	) error {
 		backoffCheckingPodRestarts := wait.Backoff{
 			Duration: 10 * time.Second,
 			Steps:    30,
@@ -376,11 +400,11 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 			return fmt.Errorf("could not cleanup, failed to delete operator namespace: %v", err)
 		}
 
-		if _, err := testsUtils.CleanFilesOnMinio(minioEnv, minioPath1); err != nil {
+		if _, err := minio.CleanFiles(minioEnv, minioPath1); err != nil {
 			return fmt.Errorf("encountered an error while cleaning up minio: %v", err)
 		}
 
-		if _, err := testsUtils.CleanFilesOnMinio(minioEnv, minioPath2); err != nil {
+		if _, err := minio.CleanFiles(minioEnv, minioPath2); err != nil {
 			return fmt.Errorf("encountered an error while cleaning up minio: %v", err)
 		}
 
@@ -448,6 +472,7 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 	}
 
 	assertClustersWorkAfterOperatorUpgrade := func(upgradeNamespace, operatorManifest string, online bool) {
+		databaseName := "appdb"
 		// generate random serverNames for the clusters each time
 		serverName1 := fmt.Sprintf("%s-%d", clusterName1, funk.RandomInt(0, 9999))
 		serverName2 := fmt.Sprintf("%s-%d", clusterName2, funk.RandomInt(0, 9999))
@@ -456,7 +481,14 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 			CreateResourceFromFile(upgradeNamespace, pgSecrets)
 		})
 		By("creating the cloud storage credentials", func() {
-			AssertStorageCredentialsAreCreated(upgradeNamespace, "aws-creds", "minio", "minio123")
+			_, err := testsUtils.CreateObjectStorageSecret(
+				upgradeNamespace,
+				"aws-creds",
+				"minio",
+				"minio123",
+				env,
+			)
+			Expect(err).NotTo(HaveOccurred())
 		})
 		By("create the certificates for MinIO", func() {
 			err := minioEnv.CreateCaSecret(env, upgradeNamespace)
@@ -485,7 +517,8 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 				// trigger any Pod restart. We still test that the operator
 				// is upgraded in this case too.
 				_, stderr, err := testsUtils.Run(
-					fmt.Sprintf("kubectl annotate -n %s cluster/%s cnpg.io/reconcilePodSpec=disabled", upgradeNamespace, clusterName1))
+					fmt.Sprintf("kubectl annotate -n %s cluster/%s cnpg.io/reconcilePodSpec=disabled",
+						upgradeNamespace, clusterName1))
 				Expect(err).NotTo(HaveOccurred(), "stderr: "+stderr)
 			}
 		})
@@ -505,10 +538,16 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 			primary, err := env.GetClusterPrimary(upgradeNamespace, clusterName1)
 			Expect(err).ToNot(HaveOccurred())
 
-			commandTimeout := time.Second * 10
 			query := "CREATE TABLE IF NOT EXISTS to_restore AS VALUES (1),(2);"
-			_, _, err = env.EventuallyExecCommand(env.Ctx, *primary, specs.PostgresContainerName, &commandTimeout,
-				"psql", "-U", "postgres", "appdb", "-tAc", query)
+			_, _, err = env.EventuallyExecQueryInInstancePod(
+				testsUtils.PodLocator{
+					Namespace: primary.Namespace,
+					PodName:   primary.Name,
+				}, testsUtils.DatabaseName(databaseName),
+				query,
+				RetryTimeout,
+				PollingTime,
+			)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -627,7 +666,8 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 		By("restoring the backup taken from the first Cluster in a new cluster", func() {
 			restoredClusterName := "cluster-restore"
 			CreateResourceFromFile(upgradeNamespace, restoreFile)
-			AssertClusterIsReady(upgradeNamespace, restoredClusterName, testTimeouts[testsUtils.ClusterIsReadySlow], env)
+			AssertClusterIsReady(upgradeNamespace, restoredClusterName, testTimeouts[testsUtils.ClusterIsReadySlow],
+				env)
 
 			// Test data should be present on restored primary
 			primary := restoredClusterName + "-1"
@@ -636,7 +676,7 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 					Namespace: upgradeNamespace,
 					PodName:   primary,
 				},
-				testsUtils.DatabaseName("appdb"),
+				testsUtils.DatabaseName(databaseName),
 				"SELECT count(*) FROM to_restore")
 			Expect(strings.Trim(out, "\n"), err).To(BeEquivalentTo("2"))
 
@@ -649,7 +689,7 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 					Namespace: upgradeNamespace,
 					PodName:   primary,
 				},
-				testsUtils.DatabaseName("appdb"),
+				testsUtils.DatabaseName(databaseName),
 				"select substring(pg_walfile_name(pg_current_wal_lsn()), 1, 8)")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(strconv.Atoi(strings.Trim(out, "\n"))).To(
@@ -662,7 +702,7 @@ var _ = Describe("Upgrade", Label(tests.LabelUpgrade, tests.LabelNoOpenshift), O
 						Namespace: upgradeNamespace,
 						PodName:   primary,
 					},
-					testsUtils.DatabaseName("appdb"),
+					testsUtils.DatabaseName(databaseName),
 					"SELECT count(*) FROM pg_stat_replication")
 				return strings.Trim(out, "\n"), err
 			}, 180).Should(BeEquivalentTo("2"))

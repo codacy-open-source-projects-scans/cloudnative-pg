@@ -32,6 +32,7 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 	"github.com/cloudnative-pg/cloudnative-pg/tests"
 	testUtils "github.com/cloudnative-pg/cloudnative-pg/tests/utils"
+	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/minio"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -167,7 +168,13 @@ var _ = Describe("Verify Volume Snapshot",
 					Expect(err).ToNot(HaveOccurred())
 				})
 
-				AssertStorageCredentialsAreCreated(namespace, "backup-storage-creds", "minio", "minio123")
+				_, err = testUtils.CreateObjectStorageSecret(
+					namespace,
+					"backup-storage-creds",
+					"minio",
+					"minio123",
+					env)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("correctly executes PITR with a cold snapshot", func() {
@@ -190,7 +197,7 @@ var _ = Describe("Verify Volume Snapshot",
 					primaryPod, err := env.GetClusterPrimary(namespace, clusterToSnapshotName)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(func() (bool, error) {
-						connectionStatus, err := testUtils.MinioTestConnectivityUsingBarmanCloudWalArchive(
+						connectionStatus, err := minio.TestConnectivityUsingBarmanCloudWalArchive(
 							namespace, clusterToSnapshotName, primaryPod.GetName(), "minio", "minio123", minioEnv.ServiceName)
 						if err != nil {
 							return false, err
@@ -242,7 +249,13 @@ var _ = Describe("Verify Volume Snapshot",
 
 				By("inserting test data and creating WALs on the cluster to be snapshotted", func() {
 					// Create a "test" table with values 1,2
-					AssertCreateTestData(env, namespace, clusterToSnapshotName, tableName)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToSnapshotName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    tableName,
+					}
+					AssertCreateTestData(env, tableLocator)
 
 					// Because GetCurrentTimestamp() rounds down to the second and is executed
 					// right after the creation of the test data, we wait for 1s to avoid not
@@ -262,6 +275,7 @@ var _ = Describe("Verify Volume Snapshot",
 						apiv1.ApplicationUserSecretSuffix,
 					)
 					defer func() {
+						_ = conn.Close()
 						forward.Close()
 					}()
 					Expect(err).ToNot(HaveOccurred())
@@ -282,7 +296,13 @@ var _ = Describe("Verify Volume Snapshot",
 				})
 
 				By("verifying the correct data exists in the restored cluster", func() {
-					AssertDataExpectedCount(env, namespace, clusterToRestoreName, tableName, 2)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToRestoreName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    tableName,
+					}
+					AssertDataExpectedCount(env, tableLocator, 2)
 				})
 			})
 		})
@@ -366,7 +386,13 @@ var _ = Describe("Verify Volume Snapshot",
 
 			It("can create a declarative cold backup and restoring using it", func() {
 				By("inserting test data", func() {
-					AssertCreateTestData(env, namespace, clusterToBackupName, tableName)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToBackupName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    tableName,
+					}
+					AssertCreateTestData(env, tableLocator)
 				})
 
 				backupName, err := env.GetResourceNameFromYAML(backupFileFilePath)
@@ -386,7 +412,7 @@ var _ = Describe("Verify Volume Snapshot",
 							"Backup should be completed correctly, error message is '%s'",
 							backup.Status.Error)
 					}, testTimeouts[testUtils.VolumeSnapshotIsReady]).Should(Succeed())
-					AssertBackupConditionInClusterStatus(namespace, clusterToBackupName)
+					testUtils.AssertBackupConditionInClusterStatus(env, namespace, clusterToBackupName)
 				})
 
 				By("checking that the backup status is correctly populated", func() {
@@ -426,7 +452,13 @@ var _ = Describe("Verify Volume Snapshot",
 				})
 
 				By("checking that the data is present on the restored cluster", func() {
-					AssertDataExpectedCount(env, namespace, clusterToRestoreName, tableName, 2)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToRestoreName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    tableName,
+					}
+					AssertDataExpectedCount(env, tableLocator, 2)
 				})
 			})
 			It("can take a snapshot targeting the primary", func() {
@@ -448,7 +480,7 @@ var _ = Describe("Verify Volume Snapshot",
 							"Backup should be completed correctly, error message is '%s'",
 							backup.Status.Error)
 					}, testTimeouts[testUtils.VolumeSnapshotIsReady]).Should(Succeed())
-					AssertBackupConditionInClusterStatus(namespace, clusterToBackupName)
+					testUtils.AssertBackupConditionInClusterStatus(env, namespace, clusterToBackupName)
 				})
 
 				By("checking that the backup status is correctly populated", func() {
@@ -515,7 +547,7 @@ var _ = Describe("Verify Volume Snapshot",
 							"Backup should be completed correctly, error message is '%s'",
 							backup.Status.Error)
 					}, testTimeouts[testUtils.VolumeSnapshotIsReady]).Should(Succeed())
-					AssertBackupConditionInClusterStatus(namespace, clusterToBackupName)
+					testUtils.AssertBackupConditionInClusterStatus(env, namespace, clusterToBackupName)
 				})
 
 				By("checking that the backup status is correctly populated", func() {
@@ -577,7 +609,16 @@ var _ = Describe("Verify Volume Snapshot",
 					Expect(err).ToNot(HaveOccurred())
 				})
 
-				AssertStorageCredentialsAreCreated(namespace, "backup-storage-creds", "minio", "minio123")
+				By("creating the credentials for minio", func() {
+					_, err = testUtils.CreateObjectStorageSecret(
+						namespace,
+						"backup-storage-creds",
+						"minio",
+						"minio123",
+						env,
+					)
+					Expect(err).ToNot(HaveOccurred())
+				})
 
 				By("creating the cluster to snapshot", func() {
 					AssertCreateCluster(namespace, clusterToSnapshotName, clusterToSnapshot, env)
@@ -587,7 +628,7 @@ var _ = Describe("Verify Volume Snapshot",
 					primaryPod, err := env.GetClusterPrimary(namespace, clusterToSnapshotName)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(func() (bool, error) {
-						connectionStatus, err := testUtils.MinioTestConnectivityUsingBarmanCloudWalArchive(
+						connectionStatus, err := minio.TestConnectivityUsingBarmanCloudWalArchive(
 							namespace, clusterToSnapshotName, primaryPod.GetName(), "minio", "minio123", minioEnv.ServiceName)
 						if err != nil {
 							return false, err
@@ -615,11 +656,18 @@ var _ = Describe("Verify Volume Snapshot",
 						apiv1.ApplicationUserSecretSuffix,
 					)
 					defer func() {
+						_ = conn.Close()
 						forward.Close()
 					}()
 					Expect(err).ToNot(HaveOccurred())
 					// Create a "test" table with values 1,2
-					AssertCreateTestData(env, namespace, clusterToSnapshotName, tableName)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToSnapshotName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    tableName,
+					}
+					AssertCreateTestData(env, tableLocator)
 
 					// Insert 2 more rows which we expect not to be present at the end of the recovery
 					insertRecordIntoTable(tableName, 3, conn)
@@ -684,7 +732,13 @@ var _ = Describe("Verify Volume Snapshot",
 				})
 
 				By("verifying the correct data exists in the restored cluster", func() {
-					AssertDataExpectedCount(env, namespace, clusterToRestoreName, tableName, 4)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToRestoreName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    tableName,
+					}
+					AssertDataExpectedCount(env, tableLocator, 4)
 				})
 			})
 
@@ -700,6 +754,7 @@ var _ = Describe("Verify Volume Snapshot",
 						apiv1.ApplicationUserSecretSuffix,
 					)
 					defer func() {
+						_ = conn.Close()
 						forward.Close()
 					}()
 					Expect(err).ToNot(HaveOccurred())
@@ -740,8 +795,13 @@ var _ = Describe("Verify Volume Snapshot",
 					podList, err := env.GetClusterReplicas(namespace, clusterToSnapshotName)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(podList.Items).To(HaveLen(2))
-					AssertDataExpectedCount(env, namespace, clusterToSnapshotName, tableName, 6)
-					AssertDataExpectedCount(env, namespace, clusterToSnapshotName, tableName, 6)
+					tableLocator := TableLocator{
+						Namespace:    namespace,
+						ClusterName:  clusterToSnapshotName,
+						DatabaseName: testUtils.AppDBName,
+						TableName:    tableName,
+					}
+					AssertDataExpectedCount(env, tableLocator, 6)
 				})
 			})
 		})
