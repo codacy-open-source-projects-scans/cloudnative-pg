@@ -44,7 +44,6 @@ import (
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/controller"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/controller/roles"
-	"github.com/cloudnative-pg/cloudnative-pg/internal/management/controller/slots/infrastructure"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/controller/slots/reconciler"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/utils"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
@@ -238,10 +237,14 @@ func (r *InstanceReconciler) Reconcile(
 
 	r.configureSlotReplicator(cluster)
 
+	postgresDB, err := r.instance.ConnectionPool().Connection("postgres")
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("while getting the postgres connection: %w", err)
+	}
 	if result, err := reconciler.ReconcileReplicationSlots(
 		ctx,
 		r.instance.GetPodName(),
-		infrastructure.NewPostgresManager(r.instance.ConnectionPool()),
+		postgresDB,
 		cluster,
 	); err != nil || !result.IsZero() {
 		return result, err
@@ -1006,7 +1009,7 @@ func (r *InstanceReconciler) reconcilePostgreSQLAutoConfFilePermissions(ctx cont
 // The file is created immediately after initdb and removed after the
 // first WAL is archived
 func (r *InstanceReconciler) reconcileCheckWalArchiveFile(cluster *apiv1.Cluster) error {
-	filePath := filepath.Join(r.instance.PgData, postgresManagement.CheckEmptyWalArchiveFile)
+	filePath := filepath.Join(r.instance.PgData, constants.CheckEmptyWalArchiveFile)
 	for _, condition := range cluster.Status.Conditions {
 		// If our current condition is archiving we can delete the file
 		if condition.Type == string(apiv1.ConditionContinuousArchiving) && condition.Status == metav1.ConditionTrue {

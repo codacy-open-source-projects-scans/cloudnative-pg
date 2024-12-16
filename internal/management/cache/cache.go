@@ -14,21 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cache contains the constants and functions for reading/writing to the process local cache
-// some specific supported objects
 package cache
 
 import (
 	"sync"
-)
-
-const (
-	// ClusterKey is the key to be used to access the cached cluster
-	ClusterKey = "cluster"
-	// WALArchiveKey is the key to be used to access the cached envs for wal-archive
-	WALArchiveKey = "wal-archive"
-	// WALRestoreKey is the key to be used to access the cached envs for wal-restore
-	WALRestoreKey = "wal-restore"
 )
 
 var cache sync.Map

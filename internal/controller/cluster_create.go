@@ -176,7 +176,8 @@ func (r *ClusterReconciler) reconcileSuperuserSecret(ctx context.Context, cluste
 			cluster.GetServiceReadWriteName(),
 			"*",
 			"postgres",
-			postgresPassword)
+			postgresPassword,
+			utils.UserTypeSuperuser)
 		cluster.SetInheritedDataAndOwnership(&postgresSecret.ObjectMeta)
 
 		return createOrPatchClusterCredentialSecret(ctx, r.Client, postgresSecret)
@@ -216,7 +217,8 @@ func (r *ClusterReconciler) reconcileAppUserSecret(ctx context.Context, cluster 
 			cluster.GetServiceReadWriteName(),
 			cluster.GetApplicationDatabaseName(),
 			cluster.GetApplicationDatabaseOwner(),
-			appPassword)
+			appPassword,
+			utils.UserTypeApp)
 
 		cluster.SetInheritedDataAndOwnership(&appSecret.ObjectMeta)
 		return createOrPatchClusterCredentialSecret(ctx, r.Client, appSecret)
@@ -1062,6 +1064,14 @@ func (r *ClusterReconciler) createPrimaryInstance(
 		// reconciliation loop is started by the informers.
 		contextLogger.Info("refusing to create the primary instance while the latest generated serial is not zero",
 			"latestGeneratedNode", cluster.Status.LatestGeneratedNode)
+
+		if err := r.RegisterPhase(ctx, cluster,
+			apiv1.PhaseUnrecoverable,
+			"One or more instances were previously created, but no PersistentVolumeClaims (PVCs) exist. "+
+				"The cluster is in an unrecoverable state. To resolve this, restore the cluster from a recent backup.",
+		); err != nil {
+			return ctrl.Result{}, fmt.Errorf("while registering the unrecoverable phase: %w", err)
+		}
 		return ctrl.Result{}, nil
 	}
 

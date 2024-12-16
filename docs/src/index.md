@@ -87,6 +87,7 @@ Additionally, the community provides images for the [PostGIS extension](postgis.
   Postgres extensions through the cluster `spec`: `pgaudit`, `auto_explain`,
   `pg_stat_statements`, and `pg_failover_slots`
 * Declarative management of Postgres roles, users and groups
+* Declarative management of Postgres databases
 * Support for Local Persistent Volumes with PVC templates
 * Reuse of Persistent Volumes storage in Pods
 * Separate volumes for WAL files and tablespaces
@@ -95,12 +96,15 @@ Additionally, the community provides images for the [PostGIS extension](postgis.
 * In-place or rolling updates for operator upgrades
 * TLS connections and client certificate authentication
 * Support for custom TLS certificates (including integration with cert-manager)
-* Continuous WAL archiving to an object store (AWS S3 and S3-compatible, Azure Blob Storage, and Google Cloud Storage)
+* Continuous WAL archiving to an object store (AWS S3 and S3-compatible, Azure
+  Blob Storage, and Google Cloud Storage)
 * Backups on volume snapshots (where supported by the underlying storage classes)
 * Backups on object stores (AWS S3 and S3-compatible, Azure Blob Storage, and Google Cloud Storage)
 * Full recovery and Point-In-Time recovery from an existing backup on volume snapshots or object stores
 * Offline import of existing PostgreSQL databases, including major upgrades of PostgreSQL
-* Online import of existing PostgreSQL databases, including major upgrades of PostgreSQL, through PostgreSQL native logical replication (imperative, via the `cnpg` plugin)
+* Online import of existing PostgreSQL databases, including major upgrades of
+  PostgreSQL, through PostgreSQL native logical replication (declarative, via
+  the `Subscription` resource)
 * Fencing of an entire PostgreSQL cluster, or a subset of the instances in a declarative way
 * Hibernation of a PostgreSQL cluster in a declarative way
 * Support for quorum-based and priority-based Synchronous Replication

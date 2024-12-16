@@ -422,7 +422,7 @@ type ClusterSpec struct {
 
 	// The list of external clusters which are used in the configuration
 	// +optional
-	ExternalClusters []ExternalCluster `json:"externalClusters,omitempty"`
+	ExternalClusters ExternalClusterList `json:"externalClusters,omitempty"`
 
 	// The instances' log level, one of the following values: error, warning, info (default), debug, trace
 	// +kubebuilder:default:=info
@@ -476,6 +476,62 @@ type ClusterSpec struct {
 	// any plugin to be loaded with the corresponding configuration
 	// +optional
 	Plugins PluginConfigurationList `json:"plugins,omitempty"`
+
+	// The configuration of the probes to be injected
+	// in the PostgreSQL Pods.
+	// +optional
+	Probes *ProbesConfiguration `json:"probes,omitempty"`
+}
+
+// ProbesConfiguration represent the configuration for the probes
+// to be injected in the PostgreSQL Pods
+type ProbesConfiguration struct {
+	// The startup probe configuration
+	Startup *Probe `json:"startup,omitempty"`
+
+	// The liveness probe configuration
+	Liveness *Probe `json:"liveness,omitempty"`
+
+	// The readiness probe configuration
+	Readiness *Probe `json:"readiness,omitempty"`
+}
+
+// Probe describes a health check to be performed against a container to determine whether it is
+// alive or ready to receive traffic.
+type Probe struct {
+	// Number of seconds after the container has started before liveness probes are initiated.
+	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+	// +optional
+	InitialDelaySeconds int32 `json:"initialDelaySeconds,omitempty"`
+	// Number of seconds after which the probe times out.
+	// Defaults to 1 second. Minimum value is 1.
+	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+	// +optional
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+	// How often (in seconds) to perform the probe.
+	// Default to 10 seconds. Minimum value is 1.
+	// +optional
+	PeriodSeconds int32 `json:"periodSeconds,omitempty"`
+	// Minimum consecutive successes for the probe to be considered successful after having failed.
+	// Defaults to 1. Must be 1 for liveness and startup. Minimum value is 1.
+	// +optional
+	SuccessThreshold int32 `json:"successThreshold,omitempty"`
+	// Minimum consecutive failures for the probe to be considered failed after having succeeded.
+	// Defaults to 3. Minimum value is 1.
+	// +optional
+	FailureThreshold int32 `json:"failureThreshold,omitempty"`
+	// Optional duration in seconds the pod needs to terminate gracefully upon probe failure.
+	// The grace period is the duration in seconds after the processes running in the pod are sent
+	// a termination signal and the time when the processes are forcibly halted with a kill signal.
+	// Set this value longer than the expected cleanup time for your process.
+	// If this value is nil, the pod's terminationGracePeriodSeconds will be used. Otherwise, this
+	// value overrides the value provided by the pod spec.
+	// Value must be non-negative integer. The value zero indicates stop immediately via
+	// the kill signal (no opportunity to shut down).
+	// This is a beta field and requires enabling ProbeTerminationGracePeriod feature gate.
+	// Minimum value is 1. spec.terminationGracePeriodSeconds is used if unset.
+	// +optional
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // PluginConfigurationList represent a set of plugin with their
@@ -523,7 +579,7 @@ const (
 	PhaseImageCatalogError = "Cluster has incomplete or invalid image catalog"
 
 	// PhaseUnrecoverable for an unrecoverable cluster
-	PhaseUnrecoverable = "Cluster is in an unrecoverable state, needs manual intervention"
+	PhaseUnrecoverable = "Cluster is unrecoverable and needs manual intervention"
 
 	// PhaseArchitectureBinaryMissing is the error phase describing a missing architecture
 	PhaseArchitectureBinaryMissing = "Cluster cannot execute instance online upgrade due to missing architecture binary"
@@ -1173,10 +1229,24 @@ const (
 	SynchronousReplicaConfigurationMethodAny = SynchronousReplicaConfigurationMethod("any")
 )
 
+// DataDurabilityLevel specifies how strictly to enforce synchronous replication
+// when cluster instances are unavailable. Options are `required` or `preferred`.
+type DataDurabilityLevel string
+
+const (
+	// DataDurabilityLevelRequired means that data durability is strictly enforced
+	DataDurabilityLevelRequired DataDurabilityLevel = "required"
+
+	// DataDurabilityLevelPreferred means that data durability is enforced
+	// only when healthy replicas are available
+	DataDurabilityLevelPreferred DataDurabilityLevel = "preferred"
+)
+
 // SynchronousReplicaConfiguration contains the configuration of the
 // PostgreSQL synchronous replication feature.
 // Important: at this moment, also `.spec.minSyncReplicas` and `.spec.maxSyncReplicas`
 // need to be considered.
+// +kubebuilder:validation:XValidation:rule="self.dataDurability!='preferred' || ((!has(self.standbyNamesPre) || self.standbyNamesPre.size()==0) && (!has(self.standbyNamesPost) || self.standbyNamesPost.size()==0))",message="dataDurability set to 'preferred' requires empty 'standbyNamesPre' and empty 'standbyNamesPost'"
 type SynchronousReplicaConfiguration struct {
 	// Method to select synchronous replication standbys from the listed
 	// servers, accepting 'any' (quorum-based synchronous replication) or
@@ -1206,6 +1276,19 @@ type SynchronousReplicaConfiguration struct {
 	// only useful for priority-based synchronous replication).
 	// +optional
 	StandbyNamesPost []string `json:"standbyNamesPost,omitempty"`
+
+	// If set to "required", data durability is strictly enforced. Write operations
+	// with synchronous commit settings (`on`, `remote_write`, or `remote_apply`) will
+	// block if there are insufficient healthy replicas, ensuring data persistence.
+	// If set to "preferred", data durability is maintained when healthy replicas
+	// are available, but the required number of instances will adjust dynamically
+	// if replicas become unavailable. This setting relaxes strict durability enforcement
+	// to allow for operational continuity. This setting is only applicable if both
+	// `standbyNamesPre` and `standbyNamesPost` are unset (empty).
+	// +kubebuilder:validation:Enum=required;preferred
+	// +kubebuilder:default:=required
+	// +optional
+	DataDurability DataDurabilityLevel `json:"dataDurability,omitempty"`
 }
 
 // PostgresConfiguration defines the PostgreSQL configuration
@@ -1401,6 +1484,9 @@ type CertificatesStatus struct {
 // BootstrapInitDB is the configuration of the bootstrap process when
 // initdb is used
 // Refer to the Bootstrap page of the documentation for more information.
+// +kubebuilder:validation:XValidation:rule="!has(self.builtinLocale) || self.localeProvider == 'builtin'",message="builtinLocale is only available when localeProvider is set to `builtin`"
+// +kubebuilder:validation:XValidation:rule="!has(self.icuLocale) || self.localeProvider == 'icu'",message="icuLocale is only available when localeProvider is set to `icu`"
+// +kubebuilder:validation:XValidation:rule="!has(self.icuRules) || self.localeProvider == 'icu'",message="icuRules is only available when localeProvider is set to `icu`"
 type BootstrapInitDB struct {
 	// Name of the database used by the application. Default: `app`.
 	// +optional
@@ -1440,6 +1526,33 @@ type BootstrapInitDB struct {
 	// The value to be passed as option `--lc-ctype` for initdb (default:`C`)
 	// +optional
 	LocaleCType string `json:"localeCType,omitempty"`
+
+	// Sets the default collation order and character classification in the new database.
+	// +optional
+	Locale string `json:"locale,omitempty"`
+
+	// This option sets the locale provider for databases created in the new cluster.
+	// Available from PostgreSQL 16.
+	// +optional
+	LocaleProvider string `json:"localeProvider,omitempty"`
+
+	// Specifies the ICU locale when the ICU provider is used.
+	// This option requires `localeProvider` to be set to `icu`.
+	// Available from PostgreSQL 15.
+	// +optional
+	IcuLocale string `json:"icuLocale,omitempty"`
+
+	// Specifies additional collation rules to customize the behavior of the default collation.
+	// This option requires `localeProvider` to be set to `icu`.
+	// Available from PostgreSQL 16.
+	// +optional
+	IcuRules string `json:"icuRules,omitempty"`
+
+	// Specifies the locale name when the builtin provider is used.
+	// This option requires `localeProvider` to be set to `builtin`.
+	// Available from PostgreSQL 17.
+	// +optional
+	BuiltinLocale string `json:"builtinLocale,omitempty"`
 
 	// The value in megabytes (1 to 1024) to be passed to the `--wal-segsize`
 	// option for initdb (default: empty, resulting in PostgreSQL default: 16MB)
@@ -1539,6 +1652,20 @@ type Import struct {
 	// `pg_restore` are invoked, avoiding data import. Default: `false`.
 	// +optional
 	SchemaOnly bool `json:"schemaOnly,omitempty"`
+
+	// List of custom options to pass to the `pg_dump` command. IMPORTANT:
+	// Use these options with caution and at your own risk, as the operator
+	// does not validate their content. Be aware that certain options may
+	// conflict with the operator's intended functionality or design.
+	// +optional
+	PgDumpExtraOptions []string `json:"pgDumpExtraOptions,omitempty"`
+
+	// List of custom options to pass to the `pg_restore` command. IMPORTANT:
+	// Use these options with caution and at your own risk, as the operator
+	// does not validate their content. Be aware that certain options may
+	// conflict with the operator's intended functionality or design.
+	// +optional
+	PgRestoreExtraOptions []string `json:"pgRestoreExtraOptions,omitempty"`
 }
 
 // ImportSource describes the source for the logical snapshot
@@ -1933,6 +2060,9 @@ type ClusterMonitoringTLSConfiguration struct {
 	Enabled bool `json:"enabled,omitempty"`
 }
 
+// ExternalClusterList is a list of external clusters
+type ExternalClusterList []ExternalCluster
+
 // ExternalCluster represents the connection parameters to an
 // external cluster which is used in the other sections of the configuration
 type ExternalCluster struct {
@@ -1971,6 +2101,10 @@ type ExternalCluster struct {
 	// The configuration for the barman-cloud tool suite
 	// +optional
 	BarmanObjectStore *BarmanObjectStoreConfiguration `json:"barmanObjectStore,omitempty"`
+
+	// The configuration of the plugin that is taking care
+	// of WAL archiving and backups for this external cluster
+	PluginConfiguration *PluginConfiguration `json:"plugin,omitempty"`
 }
 
 // EnsureOption represents whether we should enforce the presence or absence of
@@ -2025,7 +2159,6 @@ type ManagedServices struct {
 type ManagedService struct {
 	// SelectorType specifies the type of selectors that the service will have.
 	// Valid values are "rw", "r", and "ro", representing read-write, read, and read-only services.
-	// +kubebuilder:validation:Enum=rw;r;ro
 	SelectorType ServiceSelectorType `json:"selectorType"`
 
 	// UpdateStrategy describes how the service differences should be reconciled
@@ -2092,6 +2225,11 @@ type PluginStatus struct {
 	// plugin regarding the Backup management
 	// +optional
 	BackupCapabilities []string `json:"backupCapabilities,omitempty"`
+
+	// RestoreJobHookCapabilities are the list of capabilities of the
+	// plugin regarding the RestoreJobHook management
+	// +optional
+	RestoreJobHookCapabilities []string `json:"restoreJobHookCapabilities,omitempty"`
 
 	// Status contain the status reported by the plugin through the SetStatusInCluster interface
 	// +optional

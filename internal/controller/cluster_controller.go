@@ -37,6 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -49,12 +50,12 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	rolloutManager "github.com/cloudnative-pg/cloudnative-pg/internal/controller/rollout"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver/client/remote"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/reconciler/hibernation"
 	instanceReconciler "github.com/cloudnative-pg/cloudnative-pg/pkg/reconciler/instance"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/reconciler/persistentvolumeclaim"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/reconciler/replicaclusterswitch"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/resources/instance"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 )
@@ -82,7 +83,7 @@ type ClusterReconciler struct {
 	DiscoveryClient discovery.DiscoveryInterface
 	Scheme          *runtime.Scheme
 	Recorder        record.EventRecorder
-	InstanceClient  instance.Client
+	InstanceClient  remote.InstanceClient
 	Plugins         repository.Interface
 
 	rolloutManager *rolloutManager.Manager
@@ -95,7 +96,7 @@ func NewClusterReconciler(
 	plugins repository.Interface,
 ) *ClusterReconciler {
 	return &ClusterReconciler{
-		InstanceClient:  instance.NewStatusClient(),
+		InstanceClient:  remote.NewClient().Instance(),
 		DiscoveryClient: discoveryClient,
 		Client:          operatorclient.NewExtendedClient(mgr.GetClient()),
 		Scheme:          mgr.GetScheme(),
@@ -160,10 +161,10 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				"namespace", req.Namespace,
 			)
 		}
-		if err := r.deleteDatabaseFinalizers(ctx, req.NamespacedName); err != nil {
+		if err := r.notifyDeletionToOwnedResources(ctx, req.NamespacedName); err != nil {
 			contextLogger.Error(
 				err,
-				"error while deleting finalizers of Databases on the cluster",
+				"error while deleting finalizers of objects on the cluster",
 				"clusterName", req.Name,
 				"namespace", req.Namespace,
 			)
@@ -173,8 +174,14 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	ctx = cluster.SetInContext(ctx)
 
-	// Load the required plugins
-	pluginClient, err := cnpgiClient.WithPlugins(ctx, r.Plugins, cluster.Spec.Plugins.GetEnabledPluginNames()...)
+	// Load the plugins required to bootstrap and reconcile this cluster
+	enabledPluginNames := cluster.Spec.Plugins.GetEnabledPluginNames()
+	enabledPluginNames = append(enabledPluginNames, cluster.Spec.ExternalClusters.GetEnabledPluginNames()...)
+
+	pluginLoadingContext, cancelPluginLoading := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelPluginLoading()
+
+	pluginClient, err := cnpgiClient.WithPlugins(pluginLoadingContext, r.Plugins, enabledPluginNames...)
 	if err != nil {
 		var errUnknownPlugin *repository.ErrUnknownPlugin
 		if errors.As(err, &errUnknownPlugin) {
@@ -1019,13 +1026,16 @@ func (r *ClusterReconciler) handleRollingUpdate(
 }
 
 // SetupWithManager creates a ClusterReconciler
-func (r *ClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *ClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, maxConcurrentReconciles int) error {
 	err := r.createFieldIndexes(ctx, mgr)
 	if err != nil {
 		return err
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: maxConcurrentReconciles,
+		}).
 		For(&apiv1.Cluster{}).
 		Named("cluster").
 		Owns(&corev1.Pod{}).

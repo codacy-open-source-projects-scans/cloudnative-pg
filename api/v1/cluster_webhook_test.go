@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudnative-pg/barman-cloud/pkg/api"
 	"github.com/cloudnative-pg/machinery/pkg/image/reference"
 	pgversion "github.com/cloudnative-pg/machinery/pkg/postgres/version"
 	storagesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
@@ -1940,6 +1941,76 @@ var _ = Describe("Number of synchronous replicas", func() {
 	})
 })
 
+var _ = Describe("validateSynchronousReplicaConfiguration", func() {
+	It("returns no error when synchronous configuration is nil", func() {
+		cluster := &Cluster{
+			Spec: ClusterSpec{
+				PostgresConfiguration: PostgresConfiguration{
+					Synchronous: nil,
+				},
+			},
+		}
+		errors := cluster.validateSynchronousReplicaConfiguration()
+		Expect(errors).To(BeEmpty())
+	})
+
+	It("returns an error when number of synchronous replicas is greater than the total instances and standbys", func() {
+		cluster := &Cluster{
+			Spec: ClusterSpec{
+				Instances: 2,
+				PostgresConfiguration: PostgresConfiguration{
+					Synchronous: &SynchronousReplicaConfiguration{
+						Number:           5,
+						StandbyNamesPost: []string{"standby1"},
+						StandbyNamesPre:  []string{"standby2"},
+					},
+				},
+			},
+		}
+		errors := cluster.validateSynchronousReplicaConfiguration()
+		Expect(errors).To(HaveLen(1))
+		Expect(errors[0].Detail).To(
+			Equal("Invalid synchronous configuration: the number of synchronous replicas must be less than the " +
+				"total number of instances and the provided standby names."))
+	})
+
+	It("returns an error when number of synchronous replicas is equal to total instances and standbys", func() {
+		cluster := &Cluster{
+			Spec: ClusterSpec{
+				Instances: 3,
+				PostgresConfiguration: PostgresConfiguration{
+					Synchronous: &SynchronousReplicaConfiguration{
+						Number:           5,
+						StandbyNamesPost: []string{"standby1"},
+						StandbyNamesPre:  []string{"standby2"},
+					},
+				},
+			},
+		}
+		errors := cluster.validateSynchronousReplicaConfiguration()
+		Expect(errors).To(HaveLen(1))
+		Expect(errors[0].Detail).To(Equal("Invalid synchronous configuration: the number of synchronous replicas " +
+			"must be less than the total number of instances and the provided standby names."))
+	})
+
+	It("returns no error when number of synchronous replicas is less than total instances and standbys", func() {
+		cluster := &Cluster{
+			Spec: ClusterSpec{
+				Instances: 2,
+				PostgresConfiguration: PostgresConfiguration{
+					Synchronous: &SynchronousReplicaConfiguration{
+						Number:           2,
+						StandbyNamesPost: []string{"standby1"},
+						StandbyNamesPre:  []string{"standby2"},
+					},
+				},
+			},
+		}
+		errors := cluster.validateSynchronousReplicaConfiguration()
+		Expect(errors).To(BeEmpty())
+	})
+})
+
 var _ = Describe("storage configuration validation", func() {
 	It("complains if the size is being reduced", func() {
 		clusterOld := Cluster{
@@ -2258,23 +2329,46 @@ var _ = Describe("bootstrap recovery validation", func() {
 		Expect(result).To(BeEmpty())
 	})
 
-	It("does not complain when bootstrap recovery source matches one of the names of external clusters", func() {
-		recoveryCluster := &Cluster{
-			Spec: ClusterSpec{
-				Bootstrap: &BootstrapConfiguration{
-					Recovery: &BootstrapRecovery{
-						Source: "test",
+	Context("does not complain when bootstrap recovery source matches one of the names of external clusters", func() {
+		When("using a barman object store configuration", func() {
+			recoveryCluster := &Cluster{
+				Spec: ClusterSpec{
+					Bootstrap: &BootstrapConfiguration{
+						Recovery: &BootstrapRecovery{
+							Source: "test",
+						},
+					},
+					ExternalClusters: []ExternalCluster{
+						{
+							Name:              "test",
+							BarmanObjectStore: &api.BarmanObjectStoreConfiguration{},
+						},
 					},
 				},
-				ExternalClusters: []ExternalCluster{
-					{
-						Name: "test",
+			}
+			errorsList := recoveryCluster.validateBootstrapRecoverySource()
+			Expect(errorsList).To(BeEmpty())
+		})
+
+		When("using a plugin configuration", func() {
+			recoveryCluster := &Cluster{
+				Spec: ClusterSpec{
+					Bootstrap: &BootstrapConfiguration{
+						Recovery: &BootstrapRecovery{
+							Source: "test",
+						},
+					},
+					ExternalClusters: []ExternalCluster{
+						{
+							Name:                "test",
+							PluginConfiguration: &PluginConfiguration{},
+						},
 					},
 				},
-			},
-		}
-		errorsList := recoveryCluster.validateBootstrapRecoverySource()
-		Expect(errorsList).To(BeEmpty())
+			}
+			errorsList := recoveryCluster.validateBootstrapRecoverySource()
+			Expect(errorsList).To(BeEmpty())
+		})
 	})
 
 	It("complains when bootstrap recovery source does not match one of the names of external clusters", func() {
@@ -2294,6 +2388,25 @@ var _ = Describe("bootstrap recovery validation", func() {
 		}
 		errorsList := recoveryCluster.validateBootstrapRecoverySource()
 		Expect(errorsList).ToNot(BeEmpty())
+	})
+
+	It("complains when bootstrap recovery source have no BarmanObjectStore nor plugin configuration", func() {
+		recoveryCluster := &Cluster{
+			Spec: ClusterSpec{
+				Bootstrap: &BootstrapConfiguration{
+					Recovery: &BootstrapRecovery{
+						Source: "test",
+					},
+				},
+				ExternalClusters: []ExternalCluster{
+					{
+						Name: "test",
+					},
+				},
+			},
+		}
+		errorsList := recoveryCluster.validateBootstrapRecoverySource()
+		Expect(errorsList).To(HaveLen(1))
 	})
 })
 

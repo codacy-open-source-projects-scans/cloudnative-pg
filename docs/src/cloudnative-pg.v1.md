@@ -12,7 +12,9 @@
 - [Database](#postgresql-cnpg-io-v1-Database)
 - [ImageCatalog](#postgresql-cnpg-io-v1-ImageCatalog)
 - [Pooler](#postgresql-cnpg-io-v1-Pooler)
+- [Publication](#postgresql-cnpg-io-v1-Publication)
 - [ScheduledBackup](#postgresql-cnpg-io-v1-ScheduledBackup)
+- [Subscription](#postgresql-cnpg-io-v1-Subscription)
 
 ## Backup     {#postgresql-cnpg-io-v1-Backup}
 
@@ -224,6 +226,42 @@ More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-
 </tbody>
 </table>
 
+## Publication     {#postgresql-cnpg-io-v1-Publication}
+
+
+**Appears in:**
+
+
+
+<p>Publication is the Schema for the publications API</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>apiVersion</code> <B>[Required]</B><br/>string</td><td><code>postgresql.cnpg.io/v1</code></td></tr>
+<tr><td><code>kind</code> <B>[Required]</B><br/>string</td><td><code>Publication</code></td></tr>
+<tr><td><code>metadata</code> <B>[Required]</B><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#objectmeta-v1-meta"><i>meta/v1.ObjectMeta</i></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span>Refer to the Kubernetes API documentation for the fields of the <code>metadata</code> field.</td>
+</tr>
+<tr><td><code>spec</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-PublicationSpec"><i>PublicationSpec</i></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span></td>
+</tr>
+<tr><td><code>status</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-PublicationStatus"><i>PublicationStatus</i></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span></td>
+</tr>
+</tbody>
+</table>
+
 ## ScheduledBackup     {#postgresql-cnpg-io-v1-ScheduledBackup}
 
 
@@ -258,6 +296,42 @@ More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-
 to date. Populated by the system. Read-only.
 More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status</p>
 </td>
+</tr>
+</tbody>
+</table>
+
+## Subscription     {#postgresql-cnpg-io-v1-Subscription}
+
+
+**Appears in:**
+
+
+
+<p>Subscription is the Schema for the subscriptions API</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>apiVersion</code> <B>[Required]</B><br/>string</td><td><code>postgresql.cnpg.io/v1</code></td></tr>
+<tr><td><code>kind</code> <B>[Required]</B><br/>string</td><td><code>Subscription</code></td></tr>
+<tr><td><code>metadata</code> <B>[Required]</B><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#objectmeta-v1-meta"><i>meta/v1.ObjectMeta</i></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span>Refer to the Kubernetes API documentation for the fields of the <code>metadata</code> field.</td>
+</tr>
+<tr><td><code>spec</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-SubscriptionSpec"><i>SubscriptionSpec</i></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span></td>
+</tr>
+<tr><td><code>status</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-SubscriptionStatus"><i>SubscriptionStatus</i></a>
+</td>
+<td>
+   <span class="text-muted">No description provided.</span></td>
 </tr>
 </tbody>
 </table>
@@ -1005,6 +1079,48 @@ enabling checksums on data pages (default: <code>false</code>)</p>
    <p>The value to be passed as option <code>--lc-ctype</code> for initdb (default:<code>C</code>)</p>
 </td>
 </tr>
+<tr><td><code>locale</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Sets the default collation order and character classification in the new database.</p>
+</td>
+</tr>
+<tr><td><code>localeProvider</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>This option sets the locale provider for databases created in the new cluster.
+Available from PostgreSQL 16.</p>
+</td>
+</tr>
+<tr><td><code>icuLocale</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Specifies the ICU locale when the ICU provider is used.
+This option requires <code>localeProvider</code> to be set to <code>icu</code>.
+Available from PostgreSQL 15.</p>
+</td>
+</tr>
+<tr><td><code>icuRules</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Specifies additional collation rules to customize the behavior of the default collation.
+This option requires <code>localeProvider</code> to be set to <code>icu</code>.
+Available from PostgreSQL 16.</p>
+</td>
+</tr>
+<tr><td><code>builtinLocale</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Specifies the locale name when the builtin provider is used.
+This option requires <code>localeProvider</code> to be set to <code>builtin</code>.
+Available from PostgreSQL 17.</p>
+</td>
+</tr>
 <tr><td><code>walSegmentSize</code><br/>
 <i>int</i>
 </td>
@@ -1735,7 +1851,7 @@ it can be with a switchover (<code>switchover</code>) or in-place (<code>restart
 </td>
 </tr>
 <tr><td><code>externalClusters</code><br/>
-<a href="#postgresql-cnpg-io-v1-ExternalCluster"><i>[]ExternalCluster</i></a>
+<a href="#postgresql-cnpg-io-v1-ExternalClusterList"><i>ExternalClusterList</i></a>
 </td>
 <td>
    <p>The list of external clusters which are used in the configuration</p>
@@ -1814,6 +1930,14 @@ development/staging purposes.</p>
 <td>
    <p>The plugins configuration, containing
 any plugin to be loaded with the corresponding configuration</p>
+</td>
+</tr>
+<tr><td><code>probes</code><br/>
+<a href="#postgresql-cnpg-io-v1-ProbesConfiguration"><i>ProbesConfiguration</i></a>
+</td>
+<td>
+   <p>The configuration of the probes to be injected
+in the PostgreSQL Pods.</p>
 </td>
 </tr>
 </tbody>
@@ -2199,6 +2323,21 @@ Map keys are the config map names, map values are the versions</p>
 </tbody>
 </table>
 
+## DataDurabilityLevel     {#postgresql-cnpg-io-v1-DataDurabilityLevel}
+
+(Alias of `string`)
+
+**Appears in:**
+
+- [SynchronousReplicaConfiguration](#postgresql-cnpg-io-v1-SynchronousReplicaConfiguration)
+
+
+<p>DataDurabilityLevel specifies how strictly to enforce synchronous replication
+when cluster instances are unavailable. Options are <code>required</code> or <code>preferred</code>.</p>
+
+
+
+
 ## DataSource     {#postgresql-cnpg-io-v1-DataSource}
 
 
@@ -2283,7 +2422,9 @@ PostgreSQL cluster from an existing storage</p>
 - [Database](#postgresql-cnpg-io-v1-Database)
 
 
-<p>DatabaseSpec is the specification of a Postgresql Database</p>
+<p>DatabaseSpec is the specification of a Postgresql Database, built around the
+<code>CREATE DATABASE</code>, <code>ALTER DATABASE</code>, and <code>DROP DATABASE</code> SQL commands of
+PostgreSQL.</p>
 
 
 <table class="table">
@@ -2293,127 +2434,162 @@ PostgreSQL cluster from an existing storage</p>
 <a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#localobjectreference-v1-core"><i>core/v1.LocalObjectReference</i></a>
 </td>
 <td>
-   <p>The corresponding cluster</p>
+   <p>The name of the PostgreSQL cluster hosting the database.</p>
+</td>
+</tr>
+<tr><td><code>ensure</code><br/>
+<a href="#postgresql-cnpg-io-v1-EnsureOption"><i>EnsureOption</i></a>
+</td>
+<td>
+   <p>Ensure the PostgreSQL database is <code>present</code> or <code>absent</code> - defaults to &quot;present&quot;.</p>
 </td>
 </tr>
 <tr><td><code>name</code> <B>[Required]</B><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The name inside PostgreSQL</p>
+   <p>The name of the database to create inside PostgreSQL. This setting cannot be changed.</p>
 </td>
 </tr>
 <tr><td><code>owner</code> <B>[Required]</B><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The owner</p>
+   <p>Maps to the <code>OWNER</code> parameter of <code>CREATE DATABASE</code>.
+Maps to the <code>OWNER TO</code> command of <code>ALTER DATABASE</code>.
+The role name of the user who owns the database inside PostgreSQL.</p>
 </td>
 </tr>
 <tr><td><code>template</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The name of the template from which to create the new database</p>
+   <p>Maps to the <code>TEMPLATE</code> parameter of <code>CREATE DATABASE</code>. This setting
+cannot be changed. The name of the template from which to create
+this database.</p>
 </td>
 </tr>
 <tr><td><code>encoding</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The encoding (cannot be changed)</p>
+   <p>Maps to the <code>ENCODING</code> parameter of <code>CREATE DATABASE</code>. This setting
+cannot be changed. Character set encoding to use in the database.</p>
 </td>
 </tr>
 <tr><td><code>locale</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The locale (cannot be changed)</p>
+   <p>Maps to the <code>LOCALE</code> parameter of <code>CREATE DATABASE</code>. This setting
+cannot be changed. Sets the default collation order and character
+classification in the new database.</p>
 </td>
 </tr>
-<tr><td><code>locale_provider</code><br/>
+<tr><td><code>localeProvider</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The locale provider (cannot be changed)</p>
+   <p>Maps to the <code>LOCALE_PROVIDER</code> parameter of <code>CREATE DATABASE</code>. This
+setting cannot be changed. This option sets the locale provider for
+databases created in the new cluster. Available from PostgreSQL 16.</p>
 </td>
 </tr>
-<tr><td><code>lc_collate</code><br/>
+<tr><td><code>localeCollate</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The LC_COLLATE (cannot be changed)</p>
+   <p>Maps to the <code>LC_COLLATE</code> parameter of <code>CREATE DATABASE</code>. This
+setting cannot be changed.</p>
 </td>
 </tr>
-<tr><td><code>lc_ctype</code><br/>
+<tr><td><code>localeCType</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The LC_CTYPE (cannot be changed)</p>
+   <p>Maps to the <code>LC_CTYPE</code> parameter of <code>CREATE DATABASE</code>. This setting
+cannot be changed.</p>
 </td>
 </tr>
-<tr><td><code>icu_locale</code><br/>
+<tr><td><code>icuLocale</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The ICU_LOCALE (cannot be changed)</p>
+   <p>Maps to the <code>ICU_LOCALE</code> parameter of <code>CREATE DATABASE</code>. This
+setting cannot be changed. Specifies the ICU locale when the ICU
+provider is used. This option requires <code>localeProvider</code> to be set to
+<code>icu</code>. Available from PostgreSQL 15.</p>
 </td>
 </tr>
-<tr><td><code>icu_rules</code><br/>
+<tr><td><code>icuRules</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The ICU_RULES (cannot be changed)</p>
+   <p>Maps to the <code>ICU_RULES</code> parameter of <code>CREATE DATABASE</code>. This setting
+cannot be changed. Specifies additional collation rules to customize
+the behavior of the default collation. This option requires
+<code>localeProvider</code> to be set to <code>icu</code>. Available from PostgreSQL 16.</p>
 </td>
 </tr>
-<tr><td><code>builtin_locale</code><br/>
+<tr><td><code>builtinLocale</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The BUILTIN_LOCALE (cannot be changed)</p>
+   <p>Maps to the <code>BUILTIN_LOCALE</code> parameter of <code>CREATE DATABASE</code>. This
+setting cannot be changed. Specifies the locale name when the
+builtin provider is used. This option requires <code>localeProvider</code> to
+be set to <code>builtin</code>. Available from PostgreSQL 17.</p>
 </td>
 </tr>
-<tr><td><code>collation_version</code><br/>
+<tr><td><code>collationVersion</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The COLLATION_VERSION (cannot be changed)</p>
+   <p>Maps to the <code>COLLATION_VERSION</code> parameter of <code>CREATE DATABASE</code>. This
+setting cannot be changed.</p>
 </td>
 </tr>
 <tr><td><code>isTemplate</code><br/>
 <i>bool</i>
 </td>
 <td>
-   <p>True when the database is a template</p>
+   <p>Maps to the <code>IS_TEMPLATE</code> parameter of <code>CREATE DATABASE</code> and <code>ALTER DATABASE</code>. If true, this database is considered a template and can
+be cloned by any user with <code>CREATEDB</code> privileges.</p>
 </td>
 </tr>
 <tr><td><code>allowConnections</code><br/>
 <i>bool</i>
 </td>
 <td>
-   <p>True when connections to this database are allowed</p>
+   <p>Maps to the <code>ALLOW_CONNECTIONS</code> parameter of <code>CREATE DATABASE</code> and
+<code>ALTER DATABASE</code>. If false then no one can connect to this database.</p>
 </td>
 </tr>
 <tr><td><code>connectionLimit</code><br/>
 <i>int</i>
 </td>
 <td>
-   <p>Connection limit, -1 means no limit and -2 means the
-database is not valid</p>
+   <p>Maps to the <code>CONNECTION LIMIT</code> clause of <code>CREATE DATABASE</code> and
+<code>ALTER DATABASE</code>. How many concurrent connections can be made to
+this database. -1 (the default) means no limit.</p>
 </td>
 </tr>
 <tr><td><code>tablespace</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>The default tablespace of this database</p>
+   <p>Maps to the <code>TABLESPACE</code> parameter of <code>CREATE DATABASE</code>.
+Maps to the <code>SET TABLESPACE</code> command of <code>ALTER DATABASE</code>.
+The name of the tablespace (in PostgreSQL) that will be associated
+with the new database. This tablespace will be the default
+tablespace used for objects created in this database.</p>
 </td>
 </tr>
 <tr><td><code>databaseReclaimPolicy</code><br/>
 <a href="#postgresql-cnpg-io-v1-DatabaseReclaimPolicy"><i>DatabaseReclaimPolicy</i></a>
 </td>
 <td>
-   <p>The policy for end-of-life maintenance of this database</p>
+   <p>The policy for end-of-life maintenance of this database.</p>
 </td>
 </tr>
 </tbody>
@@ -2441,18 +2617,18 @@ database is not valid</p>
 desired state that was synchronized</p>
 </td>
 </tr>
-<tr><td><code>ready</code><br/>
+<tr><td><code>applied</code><br/>
 <i>bool</i>
 </td>
 <td>
-   <p>Ready is true if the database was reconciled correctly</p>
+   <p>Applied is true if the database was reconciled correctly</p>
 </td>
 </tr>
-<tr><td><code>error</code><br/>
+<tr><td><code>message</code><br/>
 <i>string</i>
 </td>
 <td>
-   <p>Error is the reconciliation error message</p>
+   <p>Message is the reconciliation output message</p>
 </td>
 </tr>
 </tbody>
@@ -2493,6 +2669,8 @@ desired state that was synchronized</p>
 
 **Appears in:**
 
+- [DatabaseSpec](#postgresql-cnpg-io-v1-DatabaseSpec)
+
 - [RoleConfiguration](#postgresql-cnpg-io-v1-RoleConfiguration)
 
 
@@ -2529,82 +2707,6 @@ storage</p>
 </td>
 <td>
    <p>TemporaryData is the size limit of the temporary data volume</p>
-</td>
-</tr>
-</tbody>
-</table>
-
-## ExternalCluster     {#postgresql-cnpg-io-v1-ExternalCluster}
-
-
-**Appears in:**
-
-- [ClusterSpec](#postgresql-cnpg-io-v1-ClusterSpec)
-
-
-<p>ExternalCluster represents the connection parameters to an
-external cluster which is used in the other sections of the configuration</p>
-
-
-<table class="table">
-<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td><code>name</code> <B>[Required]</B><br/>
-<i>string</i>
-</td>
-<td>
-   <p>The server name, required</p>
-</td>
-</tr>
-<tr><td><code>connectionParameters</code><br/>
-<i>map[string]string</i>
-</td>
-<td>
-   <p>The list of connection parameters, such as dbname, host, username, etc</p>
-</td>
-</tr>
-<tr><td><code>sslCert</code><br/>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#secretkeyselector-v1-core"><i>core/v1.SecretKeySelector</i></a>
-</td>
-<td>
-   <p>The reference to an SSL certificate to be used to connect to this
-instance</p>
-</td>
-</tr>
-<tr><td><code>sslKey</code><br/>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#secretkeyselector-v1-core"><i>core/v1.SecretKeySelector</i></a>
-</td>
-<td>
-   <p>The reference to an SSL private key to be used to connect to this
-instance</p>
-</td>
-</tr>
-<tr><td><code>sslRootCert</code><br/>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#secretkeyselector-v1-core"><i>core/v1.SecretKeySelector</i></a>
-</td>
-<td>
-   <p>The reference to an SSL CA public key to be used to connect to this
-instance</p>
-</td>
-</tr>
-<tr><td><code>password</code><br/>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#secretkeyselector-v1-core"><i>core/v1.SecretKeySelector</i></a>
-</td>
-<td>
-   <p>The reference to the password to be used to connect to the server.
-If a password is provided, CloudNativePG creates a PostgreSQL
-passfile at <code>/controller/external/NAME/pass</code> (where &quot;NAME&quot; is the
-cluster's name). This passfile is automatically referenced in the
-connection string when establishing a connection to the remote
-PostgreSQL server from the current PostgreSQL <code>Cluster</code>. This ensures
-secure and efficient password management for external clusters.</p>
-</td>
-</tr>
-<tr><td><code>barmanObjectStore</code><br/>
-<a href="https://pkg.go.dev/github.com/cloudnative-pg/barman-cloud/pkg/api/#BarmanObjectStoreConfiguration"><i>github.com/cloudnative-pg/barman-cloud/pkg/api.BarmanObjectStoreConfiguration</i></a>
-</td>
-<td>
-   <p>The configuration for the barman-cloud tool suite</p>
 </td>
 </tr>
 </tbody>
@@ -2723,6 +2825,26 @@ database right after is imported - to be used with extreme care
 <td>
    <p>When set to true, only the <code>pre-data</code> and <code>post-data</code> sections of
 <code>pg_restore</code> are invoked, avoiding data import. Default: <code>false</code>.</p>
+</td>
+</tr>
+<tr><td><code>pgDumpExtraOptions</code><br/>
+<i>[]string</i>
+</td>
+<td>
+   <p>List of custom options to pass to the <code>pg_dump</code> command. IMPORTANT:
+Use these options with caution and at your own risk, as the operator
+does not validate their content. Be aware that certain options may
+conflict with the operator's intended functionality or design.</p>
+</td>
+</tr>
+<tr><td><code>pgRestoreExtraOptions</code><br/>
+<i>[]string</i>
+</td>
+<td>
+   <p>List of custom options to pass to the <code>pg_restore</code> command. IMPORTANT:
+Use these options with caution and at your own risk, as the operator
+does not validate their content. Be aware that certain options may
+conflict with the operator's intended functionality or design.</p>
 </td>
 </tr>
 </tbody>
@@ -3481,6 +3603,44 @@ the operator calls PgBouncer's <code>PAUSE</code> and <code>RESUME</code> comman
 </tbody>
 </table>
 
+## PluginConfiguration     {#postgresql-cnpg-io-v1-PluginConfiguration}
+
+
+**Appears in:**
+
+
+
+<p>PluginConfiguration specifies a plugin that need to be loaded for this
+cluster to be reconciled</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>name</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Name is the plugin name</p>
+</td>
+</tr>
+<tr><td><code>enabled</code><br/>
+<i>bool</i>
+</td>
+<td>
+   <p>Enabled is true if this plugin will be used</p>
+</td>
+</tr>
+<tr><td><code>parameters</code><br/>
+<i>map[string]string</i>
+</td>
+<td>
+   <p>Parameters is the configuration of the plugin</p>
+</td>
+</tr>
+</tbody>
+</table>
+
 ## PluginConfigurationList     {#postgresql-cnpg-io-v1-PluginConfigurationList}
 
 (Alias of `[]github.com/cloudnative-pg/cloudnative-pg/api/v1.PluginConfiguration`)
@@ -3555,6 +3715,14 @@ plugin regarding the WAL management</p>
 <td>
    <p>BackupCapabilities are the list of capabilities of the
 plugin regarding the Backup management</p>
+</td>
+</tr>
+<tr><td><code>restoreJobHookCapabilities</code><br/>
+<i>[]string</i>
+</td>
+<td>
+   <p>RestoreJobHookCapabilities are the list of capabilities of the
+plugin regarding the RestoreJobHook management</p>
 </td>
 </tr>
 <tr><td><code>status</code><br/>
@@ -3968,6 +4136,346 @@ the primary server of the cluster as part of rolling updates</p>
 
 
 
+
+## Probe     {#postgresql-cnpg-io-v1-Probe}
+
+
+**Appears in:**
+
+- [ProbesConfiguration](#postgresql-cnpg-io-v1-ProbesConfiguration)
+
+
+<p>Probe describes a health check to be performed against a container to determine whether it is
+alive or ready to receive traffic.</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>initialDelaySeconds</code><br/>
+<i>int32</i>
+</td>
+<td>
+   <p>Number of seconds after the container has started before liveness probes are initiated.
+More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes</p>
+</td>
+</tr>
+<tr><td><code>timeoutSeconds</code><br/>
+<i>int32</i>
+</td>
+<td>
+   <p>Number of seconds after which the probe times out.
+Defaults to 1 second. Minimum value is 1.
+More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes</p>
+</td>
+</tr>
+<tr><td><code>periodSeconds</code><br/>
+<i>int32</i>
+</td>
+<td>
+   <p>How often (in seconds) to perform the probe.
+Default to 10 seconds. Minimum value is 1.</p>
+</td>
+</tr>
+<tr><td><code>successThreshold</code><br/>
+<i>int32</i>
+</td>
+<td>
+   <p>Minimum consecutive successes for the probe to be considered successful after having failed.
+Defaults to 1. Must be 1 for liveness and startup. Minimum value is 1.</p>
+</td>
+</tr>
+<tr><td><code>failureThreshold</code><br/>
+<i>int32</i>
+</td>
+<td>
+   <p>Minimum consecutive failures for the probe to be considered failed after having succeeded.
+Defaults to 3. Minimum value is 1.</p>
+</td>
+</tr>
+<tr><td><code>terminationGracePeriodSeconds</code><br/>
+<i>int64</i>
+</td>
+<td>
+   <p>Optional duration in seconds the pod needs to terminate gracefully upon probe failure.
+The grace period is the duration in seconds after the processes running in the pod are sent
+a termination signal and the time when the processes are forcibly halted with a kill signal.
+Set this value longer than the expected cleanup time for your process.
+If this value is nil, the pod's terminationGracePeriodSeconds will be used. Otherwise, this
+value overrides the value provided by the pod spec.
+Value must be non-negative integer. The value zero indicates stop immediately via
+the kill signal (no opportunity to shut down).
+This is a beta field and requires enabling ProbeTerminationGracePeriod feature gate.
+Minimum value is 1. spec.terminationGracePeriodSeconds is used if unset.</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## ProbesConfiguration     {#postgresql-cnpg-io-v1-ProbesConfiguration}
+
+
+**Appears in:**
+
+- [ClusterSpec](#postgresql-cnpg-io-v1-ClusterSpec)
+
+
+<p>ProbesConfiguration represent the configuration for the probes
+to be injected in the PostgreSQL Pods</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>startup</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-Probe"><i>Probe</i></a>
+</td>
+<td>
+   <p>The startup probe configuration</p>
+</td>
+</tr>
+<tr><td><code>liveness</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-Probe"><i>Probe</i></a>
+</td>
+<td>
+   <p>The liveness probe configuration</p>
+</td>
+</tr>
+<tr><td><code>readiness</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-Probe"><i>Probe</i></a>
+</td>
+<td>
+   <p>The readiness probe configuration</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## PublicationReclaimPolicy     {#postgresql-cnpg-io-v1-PublicationReclaimPolicy}
+
+(Alias of `string`)
+
+**Appears in:**
+
+- [PublicationSpec](#postgresql-cnpg-io-v1-PublicationSpec)
+
+
+<p>PublicationReclaimPolicy defines a policy for end-of-life maintenance of Publications.</p>
+
+
+
+
+## PublicationSpec     {#postgresql-cnpg-io-v1-PublicationSpec}
+
+
+**Appears in:**
+
+- [Publication](#postgresql-cnpg-io-v1-Publication)
+
+
+<p>PublicationSpec defines the desired state of Publication</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>cluster</code> <B>[Required]</B><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#localobjectreference-v1-core"><i>core/v1.LocalObjectReference</i></a>
+</td>
+<td>
+   <p>The name of the PostgreSQL cluster that identifies the &quot;publisher&quot;</p>
+</td>
+</tr>
+<tr><td><code>name</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The name of the publication inside PostgreSQL</p>
+</td>
+</tr>
+<tr><td><code>dbname</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The name of the database where the publication will be installed in
+the &quot;publisher&quot; cluster</p>
+</td>
+</tr>
+<tr><td><code>parameters</code><br/>
+<i>map[string]string</i>
+</td>
+<td>
+   <p>Publication parameters part of the <code>WITH</code> clause as expected by
+PostgreSQL <code>CREATE PUBLICATION</code> command</p>
+</td>
+</tr>
+<tr><td><code>target</code> <B>[Required]</B><br/>
+<a href="#postgresql-cnpg-io-v1-PublicationTarget"><i>PublicationTarget</i></a>
+</td>
+<td>
+   <p>Target of the publication as expected by PostgreSQL <code>CREATE PUBLICATION</code> command</p>
+</td>
+</tr>
+<tr><td><code>publicationReclaimPolicy</code><br/>
+<a href="#postgresql-cnpg-io-v1-PublicationReclaimPolicy"><i>PublicationReclaimPolicy</i></a>
+</td>
+<td>
+   <p>The policy for end-of-life maintenance of this publication</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## PublicationStatus     {#postgresql-cnpg-io-v1-PublicationStatus}
+
+
+**Appears in:**
+
+- [Publication](#postgresql-cnpg-io-v1-Publication)
+
+
+<p>PublicationStatus defines the observed state of Publication</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>observedGeneration</code><br/>
+<i>int64</i>
+</td>
+<td>
+   <p>A sequence number representing the latest
+desired state that was synchronized</p>
+</td>
+</tr>
+<tr><td><code>applied</code><br/>
+<i>bool</i>
+</td>
+<td>
+   <p>Applied is true if the publication was reconciled correctly</p>
+</td>
+</tr>
+<tr><td><code>message</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Message is the reconciliation output message</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## PublicationTarget     {#postgresql-cnpg-io-v1-PublicationTarget}
+
+
+**Appears in:**
+
+- [PublicationSpec](#postgresql-cnpg-io-v1-PublicationSpec)
+
+
+<p>PublicationTarget is what this publication should publish</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>allTables</code><br/>
+<i>bool</i>
+</td>
+<td>
+   <p>Marks the publication as one that replicates changes for all tables
+in the database, including tables created in the future.
+Corresponding to <code>FOR ALL TABLES</code> in PostgreSQL.</p>
+</td>
+</tr>
+<tr><td><code>objects</code><br/>
+<a href="#postgresql-cnpg-io-v1-PublicationTargetObject"><i>[]PublicationTargetObject</i></a>
+</td>
+<td>
+   <p>Just the following schema objects</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## PublicationTargetObject     {#postgresql-cnpg-io-v1-PublicationTargetObject}
+
+
+**Appears in:**
+
+- [PublicationTarget](#postgresql-cnpg-io-v1-PublicationTarget)
+
+
+<p>PublicationTargetObject is an object to publish</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>tablesInSchema</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Marks the publication as one that replicates changes for all tables
+in the specified list of schemas, including tables created in the
+future. Corresponding to <code>FOR TABLES IN SCHEMA</code> in PostgreSQL.</p>
+</td>
+</tr>
+<tr><td><code>table</code><br/>
+<a href="#postgresql-cnpg-io-v1-PublicationTargetTable"><i>PublicationTargetTable</i></a>
+</td>
+<td>
+   <p>Specifies a list of tables to add to the publication. Corresponding
+to <code>FOR TABLE</code> in PostgreSQL.</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## PublicationTargetTable     {#postgresql-cnpg-io-v1-PublicationTargetTable}
+
+
+**Appears in:**
+
+- [PublicationTargetObject](#postgresql-cnpg-io-v1-PublicationTargetObject)
+
+
+<p>PublicationTargetTable is a table to publish</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>only</code><br/>
+<i>bool</i>
+</td>
+<td>
+   <p>Whether to limit to the table only or include all its descendants</p>
+</td>
+</tr>
+<tr><td><code>name</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The table name</p>
+</td>
+</tr>
+<tr><td><code>schema</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The schema name</p>
+</td>
+</tr>
+<tr><td><code>columns</code><br/>
+<i>[]string</i>
+</td>
+<td>
+   <p>The columns to publish</p>
+</td>
+</tr>
+</tbody>
+</table>
 
 ## RecoveryTarget     {#postgresql-cnpg-io-v1-RecoveryTarget}
 
@@ -4831,6 +5339,136 @@ Size cannot be decreased.</p>
 </tbody>
 </table>
 
+## SubscriptionReclaimPolicy     {#postgresql-cnpg-io-v1-SubscriptionReclaimPolicy}
+
+(Alias of `string`)
+
+**Appears in:**
+
+- [SubscriptionSpec](#postgresql-cnpg-io-v1-SubscriptionSpec)
+
+
+<p>SubscriptionReclaimPolicy describes a policy for end-of-life maintenance of Subscriptions.</p>
+
+
+
+
+## SubscriptionSpec     {#postgresql-cnpg-io-v1-SubscriptionSpec}
+
+
+**Appears in:**
+
+- [Subscription](#postgresql-cnpg-io-v1-Subscription)
+
+
+<p>SubscriptionSpec defines the desired state of Subscription</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>cluster</code> <B>[Required]</B><br/>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#localobjectreference-v1-core"><i>core/v1.LocalObjectReference</i></a>
+</td>
+<td>
+   <p>The name of the PostgreSQL cluster that identifies the &quot;subscriber&quot;</p>
+</td>
+</tr>
+<tr><td><code>name</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The name of the subscription inside PostgreSQL</p>
+</td>
+</tr>
+<tr><td><code>dbname</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The name of the database where the publication will be installed in
+the &quot;subscriber&quot; cluster</p>
+</td>
+</tr>
+<tr><td><code>parameters</code><br/>
+<i>map[string]string</i>
+</td>
+<td>
+   <p>Subscription parameters part of the <code>WITH</code> clause as expected by
+PostgreSQL <code>CREATE SUBSCRIPTION</code> command</p>
+</td>
+</tr>
+<tr><td><code>publicationName</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The name of the publication inside the PostgreSQL database in the
+&quot;publisher&quot;</p>
+</td>
+</tr>
+<tr><td><code>publicationDBName</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The name of the database containing the publication on the external
+cluster. Defaults to the one in the external cluster definition.</p>
+</td>
+</tr>
+<tr><td><code>externalClusterName</code> <B>[Required]</B><br/>
+<i>string</i>
+</td>
+<td>
+   <p>The name of the external cluster with the publication (&quot;publisher&quot;)</p>
+</td>
+</tr>
+<tr><td><code>subscriptionReclaimPolicy</code><br/>
+<a href="#postgresql-cnpg-io-v1-SubscriptionReclaimPolicy"><i>SubscriptionReclaimPolicy</i></a>
+</td>
+<td>
+   <p>The policy for end-of-life maintenance of this subscription</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+## SubscriptionStatus     {#postgresql-cnpg-io-v1-SubscriptionStatus}
+
+
+**Appears in:**
+
+- [Subscription](#postgresql-cnpg-io-v1-Subscription)
+
+
+<p>SubscriptionStatus defines the observed state of Subscription</p>
+
+
+<table class="table">
+<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>observedGeneration</code><br/>
+<i>int64</i>
+</td>
+<td>
+   <p>A sequence number representing the latest
+desired state that was synchronized</p>
+</td>
+</tr>
+<tr><td><code>applied</code><br/>
+<i>bool</i>
+</td>
+<td>
+   <p>Applied is true if the subscription was reconciled correctly</p>
+</td>
+</tr>
+<tr><td><code>message</code><br/>
+<i>string</i>
+</td>
+<td>
+   <p>Message is the reconciliation output message</p>
+</td>
+</tr>
+</tbody>
+</table>
+
 ## SwitchReplicaClusterStatus     {#postgresql-cnpg-io-v1-SwitchReplicaClusterStatus}
 
 
@@ -4980,6 +5618,20 @@ only useful for priority-based synchronous replication).</p>
    <p>A user-defined list of application names to be added to
 <code>synchronous_standby_names</code> after local cluster pods (the order is
 only useful for priority-based synchronous replication).</p>
+</td>
+</tr>
+<tr><td><code>dataDurability</code><br/>
+<a href="#postgresql-cnpg-io-v1-DataDurabilityLevel"><i>DataDurabilityLevel</i></a>
+</td>
+<td>
+   <p>If set to &quot;required&quot;, data durability is strictly enforced. Write operations
+with synchronous commit settings (<code>on</code>, <code>remote_write</code>, or <code>remote_apply</code>) will
+block if there are insufficient healthy replicas, ensuring data persistence.
+If set to &quot;preferred&quot;, data durability is maintained when healthy replicas
+are available, but the required number of instances will adjust dynamically
+if replicas become unavailable. This setting relaxes strict durability enforcement
+to allow for operational continuity. This setting is only applicable if both
+<code>standbyNamesPre</code> and <code>standbyNamesPost</code> are unset (empty).</p>
 </td>
 </tr>
 </tbody>

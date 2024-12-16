@@ -37,11 +37,15 @@ import (
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/versions"
 )
 
 var (
 	// Namespace to operate in
 	Namespace string
+
+	// KubeContext to operate with
+	KubeContext string
 
 	// NamespaceExplicitlyPassed indicates if the namespace was passed manually
 	NamespaceExplicitlyPassed bool
@@ -96,17 +100,22 @@ func SetupKubernetesClient(configFlags *genericclioptions.ConfigFlags) error {
 		return err
 	}
 
+	KubeContext = *configFlags.Context
+
 	ClientInterface = kubernetes.NewForConfigOrDie(Config)
 
-	return nil
+	return utils.DetectSecurityContextConstraints(ClientInterface.Discovery())
 }
 
 func createClient(cfg *rest.Config) error {
 	var err error
+
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = apiv1.AddToScheme(scheme)
 	_ = storagesnapshotv1.AddToScheme(scheme)
+
+	cfg.UserAgent = fmt.Sprintf("kubectl-cnpg/v%s (%s)", versions.Version, versions.Info.Commit)
 
 	Client, err = client.New(cfg, client.Options{Scheme: scheme})
 	if err != nil {

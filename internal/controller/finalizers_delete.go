@@ -18,8 +18,10 @@ package controller
 
 import (
 	"context"
+	"errors"
 
 	"github.com/cloudnative-pg/machinery/pkg/log"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -28,36 +30,111 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 )
 
-// deleteDatabaseFinalizers deletes Database object finalizers when the cluster they were in has been deleted
-func (r *ClusterReconciler) deleteDatabaseFinalizers(ctx context.Context, namespacedName types.NamespacedName) error {
-	contextLogger := log.FromContext(ctx)
+// notifyDeletionToOwnedResources notifies the cluster deletion to the managed owned resources
+func (r *ClusterReconciler) notifyDeletionToOwnedResources(
+	ctx context.Context,
+	namespacedName types.NamespacedName,
+) error {
+	var dbList apiv1.DatabaseList
+	if err := r.List(ctx, &dbList, client.InNamespace(namespacedName.Namespace)); err != nil {
+		return err
+	}
 
-	databases := apiv1.DatabaseList{}
-	if err := r.List(ctx,
-		&databases,
-		client.InNamespace(namespacedName.Namespace),
+	if err := notifyOwnedResourceDeletion(
+		ctx,
+		r.Client,
+		namespacedName,
+		toSliceWithPointers(dbList.Items),
+		utils.DatabaseFinalizerName,
 	); err != nil {
 		return err
 	}
 
-	for idx := range databases.Items {
-		database := &databases.Items[idx]
+	var pbList apiv1.PublicationList
+	if err := r.List(ctx, &pbList, client.InNamespace(namespacedName.Namespace)); err != nil {
+		return err
+	}
 
-		if database.Spec.ClusterRef.Name != namespacedName.Name {
+	if err := notifyOwnedResourceDeletion(
+		ctx,
+		r.Client,
+		namespacedName,
+		toSliceWithPointers(pbList.Items),
+		utils.PublicationFinalizerName,
+	); err != nil {
+		return err
+	}
+
+	var sbList apiv1.SubscriptionList
+	if err := r.List(ctx, &sbList, client.InNamespace(namespacedName.Namespace)); err != nil {
+		return err
+	}
+
+	return notifyOwnedResourceDeletion(
+		ctx,
+		r.Client,
+		namespacedName,
+		toSliceWithPointers(sbList.Items),
+		utils.SubscriptionFinalizerName,
+	)
+}
+
+// clusterOwnedResourceWithStatus is a kubernetes resource object owned by a cluster that has status
+// capabilities
+type clusterOwnedResourceWithStatus interface {
+	client.Object
+	GetClusterRef() corev1.LocalObjectReference
+	GetStatusMessage() string
+	SetAsFailed(err error)
+}
+
+func toSliceWithPointers[T any](items []T) []*T {
+	result := make([]*T, len(items))
+	for i, item := range items {
+		result[i] = &item
+	}
+	return result
+}
+
+// notifyOwnedResourceDeletion deletes finalizers for a given resource type
+func notifyOwnedResourceDeletion[T clusterOwnedResourceWithStatus](
+	ctx context.Context,
+	cli client.Client,
+	namespacedName types.NamespacedName,
+	objects []T,
+	finalizerName string,
+) error {
+	contextLogger := log.FromContext(ctx)
+	for _, obj := range objects {
+		itemLogger := contextLogger.WithValues(
+			"resourceKind", obj.GetObjectKind().GroupVersionKind().Kind,
+			"resourceName", obj.GetName(),
+			"finalizerName", finalizerName,
+		)
+		if obj.GetClusterRef().Name != namespacedName.Name {
 			continue
 		}
 
-		origDatabase := database.DeepCopy()
-		if controllerutil.RemoveFinalizer(database, utils.DatabaseFinalizerName) {
-			contextLogger.Debug("Removing finalizer from database",
-				"finalizer", utils.DatabaseFinalizerName, "database", database.Name)
-			if err := r.Patch(ctx, database, client.MergeFrom(origDatabase)); err != nil {
-				contextLogger.Error(
+		const statusMessage = "cluster resource has been deleted, skipping reconciliation"
+
+		origObj := obj.DeepCopyObject().(T)
+
+		if obj.GetStatusMessage() != statusMessage {
+			obj.SetAsFailed(errors.New(statusMessage))
+			if err := cli.Status().Patch(ctx, obj, client.MergeFrom(origObj)); err != nil {
+				itemLogger.Error(err, "error while setting failed status for cluster deletion")
+				return err
+			}
+		}
+
+		if controllerutil.RemoveFinalizer(obj, finalizerName) {
+			itemLogger.Debug("Removing finalizer from resource")
+			if err := cli.Patch(ctx, obj, client.MergeFrom(origObj)); err != nil {
+				itemLogger.Error(
 					err,
-					"error while removing finalizer from database",
-					"database", database.Name,
-					"oldFinalizerList", origDatabase.ObjectMeta.Finalizers,
-					"newFinalizerList", database.ObjectMeta.Finalizers,
+					"while removing the finalizer",
+					"oldFinalizerList", origObj.GetFinalizers(),
+					"newFinalizerList", obj.GetFinalizers(),
 				)
 				return err
 			}

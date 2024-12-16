@@ -42,14 +42,14 @@ LOCALBIN ?= $(shell pwd)/bin
 BUILD_IMAGE ?= true
 POSTGRES_IMAGE_NAME ?= $(shell grep 'DefaultImageName.*=' "pkg/versions/versions.go" | cut -f 2 -d \")
 KUSTOMIZE_VERSION ?= v5.5.0
-CONTROLLER_TOOLS_VERSION ?= v0.16.4
-GORELEASER_VERSION ?= v2.3.2
-SPELLCHECK_VERSION ?= 0.43.1
+CONTROLLER_TOOLS_VERSION ?= v0.16.5
+GORELEASER_VERSION ?= v2.4.8
+SPELLCHECK_VERSION ?= 0.45.0
 WOKE_VERSION ?= 0.19.0
-OPERATOR_SDK_VERSION ?= v1.37.0
-OPM_VERSION ?= v1.47.0
+OPERATOR_SDK_VERSION ?= v1.38.0
+OPM_VERSION ?= v1.48.0
 PREFLIGHT_VERSION ?= 1.10.2
-OPENSHIFT_VERSIONS ?= v4.12-v4.17
+OPENSHIFT_VERSIONS ?= v4.12-v4.18
 ARCH ?= amd64
 
 export CONTROLLER_IMG
@@ -232,6 +232,9 @@ vet: ## Run go vet against code.
 
 lint: ## Run the linter.
 	golangci-lint run
+
+lint-fix: ## Run the linter with --fix.
+	golangci-lint run --fix
 
 shellcheck: ## Shellcheck for the hack directory.
 	@{ \

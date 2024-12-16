@@ -102,7 +102,7 @@ func (r *Cluster) setDefaults(preserveUserSettings bool) {
 		r.Spec.Bootstrap = &BootstrapConfiguration{}
 	}
 
-	// Defaulting initDB if no other boostrap method was passed
+	// Defaulting initDB if no other bootstrap method was passed
 	switch {
 	case r.Spec.Bootstrap.Recovery != nil:
 		r.defaultRecovery()
@@ -356,6 +356,7 @@ func (r *Cluster) Validate() (allErrs field.ErrorList) {
 		r.validateBackupConfiguration,
 		r.validateRetentionPolicy,
 		r.validateConfiguration,
+		r.validateSynchronousReplicaConfiguration,
 		r.validateLDAP,
 		r.validateReplicationSlots,
 		r.validateEnv,
@@ -865,7 +866,9 @@ func (r *Cluster) validateBootstrapRecoverySource() field.ErrorList {
 		return result
 	}
 
-	_, found := r.ExternalCluster(r.Spec.Bootstrap.Recovery.Source)
+	externalCluster, found := r.ExternalCluster(r.Spec.Bootstrap.Recovery.Source)
+
+	// Ensure the existence of the external cluster
 	if !found {
 		result = append(
 			result,
@@ -873,6 +876,18 @@ func (r *Cluster) validateBootstrapRecoverySource() field.ErrorList {
 				field.NewPath("spec", "bootstrap", "recovery", "source"),
 				r.Spec.Bootstrap.Recovery.Source,
 				fmt.Sprintf("External cluster %v not found", r.Spec.Bootstrap.Recovery.Source)))
+	}
+
+	// Ensure the external cluster definition has enough information
+	// to be used to recover a data directory
+	if externalCluster.BarmanObjectStore == nil && externalCluster.PluginConfiguration == nil {
+		result = append(
+			result,
+			field.Invalid(
+				field.NewPath("spec", "bootstrap", "recovery", "source"),
+				r.Spec.Bootstrap.Recovery.Source,
+				fmt.Sprintf("External cluster %v cannot be used for recovery: "+
+					"both Barman and CNPG-i plugin configurations are missing", r.Spec.Bootstrap.Recovery.Source)))
 	}
 
 	return result
@@ -1069,6 +1084,28 @@ func (r *Cluster) validateResources() field.ErrorList {
 				"Ephemeral storage request is greater than the limit",
 			))
 		}
+	}
+
+	return result
+}
+
+func (r *Cluster) validateSynchronousReplicaConfiguration() field.ErrorList {
+	if r.Spec.PostgresConfiguration.Synchronous == nil {
+		return nil
+	}
+
+	var result field.ErrorList
+
+	if r.Spec.PostgresConfiguration.Synchronous.Number >= (r.Spec.Instances +
+		len(r.Spec.PostgresConfiguration.Synchronous.StandbyNamesPost) +
+		len(r.Spec.PostgresConfiguration.Synchronous.StandbyNamesPre)) {
+		err := field.Invalid(
+			field.NewPath("spec", "postgresql", "synchronous"),
+			r.Spec.PostgresConfiguration.Synchronous,
+			"Invalid synchronous configuration: the number of synchronous replicas must be less than the "+
+				"total number of instances and the provided standby names.",
+		)
+		result = append(result, err)
 	}
 
 	return result
@@ -1853,12 +1890,14 @@ func (r *Cluster) validateExternalClusters() field.ErrorList {
 func (r *Cluster) validateExternalCluster(externalCluster *ExternalCluster, path *field.Path) field.ErrorList {
 	var result field.ErrorList
 
-	if externalCluster.ConnectionParameters == nil && externalCluster.BarmanObjectStore == nil {
+	if externalCluster.ConnectionParameters == nil &&
+		externalCluster.BarmanObjectStore == nil &&
+		externalCluster.PluginConfiguration == nil {
 		result = append(result,
 			field.Invalid(
 				path,
 				externalCluster,
-				"one of connectionParameters and barmanObjectStore is required"))
+				"one of connectionParameters, plugin and barmanObjectStore is required"))
 	}
 
 	return result

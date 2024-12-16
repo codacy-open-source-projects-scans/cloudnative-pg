@@ -14,5 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package instance contains the client capable of querying the HTTP instances endpoints
-package instance
+// Package forwardconnection provides an easy interface to create
+// a port forward from the local test to a service or pod
+// inside the testing k8s cluster
+package forwardconnection

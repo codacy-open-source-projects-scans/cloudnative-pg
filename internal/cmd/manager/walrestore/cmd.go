@@ -37,7 +37,7 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/repository"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/cache"
-	cacheClient "github.com/cloudnative-pg/cloudnative-pg/internal/management/cache/client"
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver/client/local"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 )
 
@@ -113,13 +113,18 @@ func run(ctx context.Context, pgData string, podName string, args []string) erro
 	var cluster *apiv1.Cluster
 	var err error
 
+	cacheClient := local.NewClient().Cache()
 	cluster, err = cacheClient.GetCluster()
 	if err != nil {
 		return fmt.Errorf("failed to get cluster: %w", err)
 	}
 
-	if err := restoreWALViaPlugins(ctx, cluster, walName, path.Join(pgData, destinationPath)); err != nil {
+	walFound, err := restoreWALViaPlugins(ctx, cluster, walName, path.Join(pgData, destinationPath))
+	if err != nil {
 		return err
+	}
+	if walFound {
+		return nil
 	}
 
 	recoverClusterName, recoverEnv, barmanConfiguration, err := GetRecoverConfiguration(cluster, podName)
@@ -244,7 +249,7 @@ func restoreWALViaPlugins(
 	cluster *apiv1.Cluster,
 	walName string,
 	destinationPathName string,
-) error {
+) (bool, error) {
 	contextLogger := log.FromContext(ctx)
 
 	plugins := repository.New()
@@ -255,7 +260,10 @@ func restoreWALViaPlugins(
 	defer plugins.Close()
 
 	availablePluginNamesSet := stringset.From(availablePluginNames)
-	enabledPluginNamesSet := stringset.From(cluster.Spec.Plugins.GetEnabledPluginNames())
+
+	enabledPluginNames := cluster.Spec.Plugins.GetEnabledPluginNames()
+	enabledPluginNames = append(enabledPluginNames, cluster.Spec.ExternalClusters.GetEnabledPluginNames()...)
+	enabledPluginNamesSet := stringset.From(enabledPluginNames)
 
 	client, err := pluginClient.WithPlugins(
 		ctx,
@@ -264,7 +272,7 @@ func restoreWALViaPlugins(
 	)
 	if err != nil {
 		contextLogger.Error(err, "Error while loading required plugins")
-		return err
+		return false, err
 	}
 	defer client.Close(ctx)
 

@@ -7,12 +7,12 @@
 The operator can be installed like any other resource in Kubernetes,
 through a YAML manifest applied via `kubectl`.
 
-You can install the [latest operator manifest](https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml)
+You can install the [latest operator manifest](https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/main/releases/cnpg-1.25.0-rc1.yaml)
 for this minor release as follows:
 
 ```sh
 kubectl apply --server-side -f \
-  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
+  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/main/releases/cnpg-1.25.0-rc1.yaml
 ```
 
 You can verify that with:
@@ -72,7 +72,7 @@ specific minor release, you can just run:
 
 ```sh
 curl -sSfL \
-  https://raw.githubusercontent.com/cloudnative-pg/artifacts/release-1.24/manifests/operator-manifest.yaml | \
+  https://raw.githubusercontent.com/cloudnative-pg/artifacts/release-1.25/manifests/operator-manifest.yaml | \
   kubectl apply --server-side -f -
 ```
 
@@ -170,7 +170,10 @@ promote the new primary instance using the `cnpg` plugin for `kubectl`.
 !!! Important
     In case `primaryUpdateStrategy` is set to the default value of `unsupervised`,
     an upgrade of the operator will trigger a switchover on your PostgreSQL cluster,
-    causing a (normally negligible) downtime.
+    causing a (normally negligible) downtime. If your PostgreSQL Cluster has only one
+    instance, the instance will be automatically restarted as `supervised` value is
+    not supported for `primaryUpdateStrategy`. In either case, your applications will
+    have to reconnect to PostgreSQL.
 
 The default rolling update behavior can be replaced with in-place updates of
 the instance manager. This approach does not require a restart of the

@@ -136,14 +136,18 @@ PostgreSQL outside Kubernetes. This is particularly useful for DBaaS purposes.
 
 ### Database configuration
 
-The operator is designed to manage a PostgreSQL cluster with a single
-database. The operator transparently manages access to the database through
-three Kubernetes services provisioned and managed for read-write,
+The operator is designed to bootstrap a PostgreSQL cluster with a single
+database. The operator transparently manages network access to the cluster
+through three Kubernetes services provisioned and managed for read-write,
 read, and read-only workloads.
 Using the convention-over-configuration approach, the operator creates a
 database called `app`, by default owned by a regular Postgres user with the
 same name. You can specify both the database name and the user name, if
-required.
+required, as part of the bootstrap.
+
+Additional databases can be created or managed via
+[declarative database management](declarative_database_management.md) using
+the `Database` CRD.
 
 Although no configuration is required to run the cluster, you can customize
 both PostgreSQL runtime configuration and PostgreSQL host-based
@@ -332,11 +336,12 @@ continuity and scalability.
 
 *Disaster recovery* is a business continuity component that requires
 that both backup and recovery of a database work correctly. While as a
-starting point, the goal is to achieve RPO < 5 minutes, the long-term goal is
-to implement RPO=0 backup solutions. *High availability* is the other
-important component of business continuity. Through PostgreSQL native
-physical replication and hot standby replicas, it allows the operator to perform
-failover and switchover operations. This area includes enhancements in:
+starting point, the goal is to achieve [RPO](before_you_start.md#rpo) < 5
+minutes, the long-term goal is to implement RPO=0 backup solutions. *High
+availability* is the other important component of business continuity. Through
+PostgreSQL native physical replication and hot standby replicas, it allows the
+operator to perform failover and switchover operations. This area includes
+enhancements in:
 
 - Control of PostgreSQL physical replication, such as synchronous replication,
   (cascading) replication clusters, and so on
@@ -400,8 +405,9 @@ database snapshots with cold backups.
 ### Backups from a standby
 
 The operator supports offloading base backups onto a standby without impacting
-the RPO of the database. This allows resources to be preserved on the primary, in
-particular I/O, for standard database operations.
+the [RPO](before_you_start.md#rpo) of the database. This allows resources to
+be preserved on the primary, in particular I/O, for standard database
+operations.
 
 ### Full restore from a backup
 
@@ -456,8 +462,8 @@ switchover across data centers remains necessary.)
 
 Additionally, the flexibility extends to creating delayed replica clusters
 intentionally lagging behind the primary cluster. This intentional lag aims to
-minimize the Recovery Time Objective (RTO) in the event of unintended errors,
-such as incorrect `DELETE` or `UPDATE` SQL operations.
+minimize the Recovery Time Objective ([RTO](before_you_start.md#rto)) in the
+event of unintended errors, such as incorrect `DELETE` or `UPDATE` SQL operations.
 
 ### Distributed Database Topologies
 
@@ -490,18 +496,24 @@ scalability of PostgreSQL databases, ensuring a streamlined and optimized
 experience for managing large scale data storage in cloud-native environments.
 Support for temporary tablespaces is also included.
 
-### Liveness and readiness probes
+### Startup, Liveness, and Readiness Probes
 
-The operator defines liveness and readiness probes for the Postgres
-containers that are then invoked by the kubelet. They're mapped respectively
-to the `/healthz` and `/readyz` endpoints of the web server managed
-directly by the instance manager.
+CloudNativePG configures startup, liveness, and readiness probes for PostgreSQL
+containers, which are managed by the Kubernetes kubelet. These probes interact
+with the `/healthz` and `/readyz` endpoints exposed by the instance manager's
+web server to monitor the Pod's health and readiness.
 
-The liveness probe is based on the `pg_isready` executable, and the pod is
-considered healthy with exit codes 0 (server accepting connections normally)
-and 1 (server is rejecting connections, for example, during startup). The
-readiness probe issues a simple query (`;`) to verify that the server is
-ready to accept connections.
+The startup and liveness probes use the `pg_isready` utility. A Pod is
+considered healthy if `pg_isready` returns an exit code of 0 (indicating the
+server is accepting connections) or 1 (indicating the server is rejecting
+connections, such as during startup).
+
+The readiness probe executes a simple SQL query (`;`) to verify that the
+PostgreSQL server is ready to accept client connections.
+
+All probes are configured with default settings but can be fully customized to
+meet specific needs, allowing for fine-tuning to align with your environment
+and workloads.
 
 ### Rolling deployments
 
@@ -585,6 +597,15 @@ to access the database. This optimizes the query flow toward the instances
 and makes the use of the underlying PostgreSQL resources more efficient.
 Instead of connecting directly to a PostgreSQL service, applications can now
 connect to the PgBouncer service and start reusing any existing connection.
+
+### Logical Replication
+
+CloudNativePG supports PostgreSQL's logical replication in a declarative manner
+using `Publication` and `Subscription` custom resource definitions.
+
+Logical replication is particularly useful together with the import facility
+for online data migrations (even from public DBaaS solutions) and major
+PostgreSQL upgrades.
 
 ## Level 4: Deep insights
 

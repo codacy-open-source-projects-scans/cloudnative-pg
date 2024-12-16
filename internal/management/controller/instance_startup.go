@@ -32,6 +32,7 @@ import (
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/controller"
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/archiver"
 	postgresSpec "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 )
@@ -256,6 +257,11 @@ func (r *InstanceReconciler) verifyPgDataCoherenceForPrimary(ctx context.Context
 				err, "Error while changing mode of the postgresql.auto.conf file before pg_rewind, skipped")
 		}
 
+		// We archive every WAL that have not been archived from the latest postmaster invocation.
+		if err := archiver.ArchiveAllReadyWALs(ctx, cluster, r.instance.PgData); err != nil {
+			return fmt.Errorf("while ensuring all WAL files are archived: %w", err)
+		}
+
 		// pg_rewind could require a clean shutdown of the old primary to
 		// work. Unfortunately, if the old primary is already clean starting
 		// it up may make it advance in respect to the new one.
@@ -264,23 +270,7 @@ func (r *InstanceReconciler) verifyPgDataCoherenceForPrimary(ctx context.Context
 		// retrying after having started up the instance.
 		err = r.instance.Rewind(ctx, pgVersion)
 		if err != nil {
-			contextLogger.Info(
-				"pg_rewind failed, starting the server to complete the crash recovery",
-				"err", err)
-
-			// pg_rewind requires a clean shutdown of the old primary to work.
-			// The only way to do that is to start the server again
-			// and wait for it to be available again.
-			err = r.instance.CompleteCrashRecovery(ctx)
-			if err != nil {
-				return err
-			}
-
-			// Then let's go back to the point of the new primary
-			err = r.instance.Rewind(ctx, pgVersion)
-			if err != nil {
-				return err
-			}
+			return fmt.Errorf("while exucuting pg_rewind: %w", err)
 		}
 
 		// Now I can demote myself
