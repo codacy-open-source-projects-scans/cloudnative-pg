@@ -351,6 +351,7 @@ PodDisruptionBudget
 PodDisruptionBudgets
 PodMeta
 PodMonitor
+PodSecurityContext
 PodSecurityPolicy
 PodSpec
 PodStatus
@@ -461,6 +462,7 @@ SecretRefs
 SecretStore
 SecretVersion
 SecretsResourceVersion
+SecurityContextConstraints
 SecurityProfiles
 Seealso
 SelectorType
@@ -1128,6 +1130,7 @@ passwordStatus
 pc
 pdf
 periodSeconds
+persistentVolumeClaims
 persistentvolumeclaim
 persistentvolumeclaims
 pgAdmin
@@ -1166,10 +1169,13 @@ podAffinityTerm
 podAntiAffinity
 podAntiAffinityType
 podCount
+podDisruptionBudgets
 podMetricsEndpoints
 podMonitorMetricRelabelings
 podMonitorRelabelings
+podMonitors
 podName
+podSecurityContext
 podStatuses
 podmonitor
 podtemplates
