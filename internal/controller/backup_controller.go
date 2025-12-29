@@ -451,7 +451,7 @@ func (r *BackupReconciler) isValidBackupRunning(
 			"ReStarting",
 			"Could not find the elected backup pod. Restarting backup for cluster %v on instance %v",
 			cluster.Name,
-			pod.Name,
+			backup.Status.InstanceID.PodName,
 		)
 		return false, nil
 	}
@@ -529,7 +529,7 @@ func (r *BackupReconciler) reconcileSnapshotBackup(
 		// TODO: shouldn't this be a failed backup?
 		origBackup := backup.DeepCopy()
 		backup.Status.SetAsPending()
-		if err := r.Patch(ctx, backup, client.MergeFrom(origBackup)); err != nil {
+		if err := r.Status().Patch(ctx, backup, client.MergeFrom(origBackup)); err != nil {
 			return nil, err
 		}
 
