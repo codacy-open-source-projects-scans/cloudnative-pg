@@ -587,6 +587,7 @@ _Appears in:_
 | `imagePullSecrets` _[LocalObjectReference](https://pkg.go.dev/github.com/cloudnative-pg/machinery/pkg/api#LocalObjectReference) array_ | The list of pull secrets to be used to pull the images |  |  |  |
 | `storage` _[StorageConfiguration](#storageconfiguration)_ | Configuration of the storage of the instances |  |  |  |
 | `serviceAccountTemplate` _[ServiceAccountTemplate](#serviceaccounttemplate)_ | Configure the generation of the service account |  |  |  |
+| `serviceAccountName` _string_ | Name of an existing ServiceAccount in the same namespace to use for the cluster.<br />When specified, the operator will not create a new ServiceAccount<br />but will use the provided one. This is useful for sharing a single<br />ServiceAccount across multiple clusters (e.g., for cloud IAM configurations).<br />If not specified, a ServiceAccount will be created with the cluster name.<br />Mutually exclusive with ServiceAccountTemplate. |  |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
 | `walStorage` _[StorageConfiguration](#storageconfiguration)_ | Configuration of the storage for PostgreSQL WAL (Write-Ahead Log) |  |  |  |
 | `ephemeralVolumeSource` _[EphemeralVolumeSource](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#ephemeralvolumesource-v1-core)_ | EphemeralVolumeSource allows the user to configure the source of ephemeral volumes. |  |  |  |
 | `startDelay` _integer_ | The time in seconds that is allowed for a PostgreSQL instance to<br />successfully start up (default 3600).<br />The startup probe failure threshold is derived from this value using the formula:<br />ceiling(startDelay / 10). |  | 3600 |  |
@@ -994,6 +995,7 @@ _Appears in:_
 | `extension_control_path` _string array_ | The list of directories inside the image which should be added to extension_control_path.<br />If not defined, defaults to "/share". |  |  |  |
 | `dynamic_library_path` _string array_ | The list of directories inside the image which should be added to dynamic_library_path.<br />If not defined, defaults to "/lib". |  |  |  |
 | `ld_library_path` _string array_ | The list of directories inside the image which should be added to ld_library_path. |  |  |  |
+| `bin_path` _string array_ | A list of directories within the image to be appended to the<br />PostgreSQL process's `PATH` environment variable. |  |  |  |
 
 
 #### ExtensionSpec
@@ -1745,7 +1747,7 @@ _Appears in:_
 PodSelectorRef defines a named pod label selector for use in pg_hba rules.
 Pods matching the selector in the Cluster's namespace will have their IPs
 resolved and made available for pg_hba address expansion via the
-${podselector:NAME} syntax.
+`${podselector:NAME}` syntax.
 
 
 
@@ -1935,6 +1937,7 @@ _Appears in:_
 | `deploymentStrategy` _[DeploymentStrategy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#deploymentstrategy-v1-apps)_ | The deployment strategy to use for pgbouncer to replace existing pods with new ones |  |  |  |
 | `monitoring` _[PoolerMonitoringConfiguration](#poolermonitoringconfiguration)_ | The configuration of the monitoring infrastructure of this pooler.<br />Deprecated: This feature will be removed in an upcoming release. If<br />you need this functionality, you can create a PodMonitor manually. |  |  |  |
 | `serviceTemplate` _[ServiceTemplateSpec](#servicetemplatespec)_ | Template for the Service to be created |  |  |  |
+| `serviceAccountName` _string_ | Name of an existing ServiceAccount in the same namespace to use for the pooler.<br />When specified, the operator will not create a new ServiceAccount<br />but will use the provided one. This is useful for sharing a single<br />ServiceAccount across multiple poolers (e.g., for cloud IAM configurations).<br />If not specified, a ServiceAccount will be created with the pooler name. |  |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
 
 
 #### PoolerStatus

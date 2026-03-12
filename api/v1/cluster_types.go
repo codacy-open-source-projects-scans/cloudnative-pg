@@ -330,6 +330,18 @@ type ClusterSpec struct {
 	// +optional
 	ServiceAccountTemplate *ServiceAccountTemplate `json:"serviceAccountTemplate,omitempty"`
 
+	// Name of an existing ServiceAccount in the same namespace to use for the cluster.
+	// When specified, the operator will not create a new ServiceAccount
+	// but will use the provided one. This is useful for sharing a single
+	// ServiceAccount across multiple clusters (e.g., for cloud IAM configurations).
+	// If not specified, a ServiceAccount will be created with the cluster name.
+	// Mutually exclusive with ServiceAccountTemplate.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="serviceAccountName is immutable"
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=253
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Configuration of the storage for PostgreSQL WAL (Write-Ahead Log)
 	// +optional
 	WalStorage *StorageConfiguration `json:"walStorage,omitempty"`
@@ -1440,7 +1452,7 @@ type SynchronousReplicaConfiguration struct {
 // PodSelectorRef defines a named pod label selector for use in pg_hba rules.
 // Pods matching the selector in the Cluster's namespace will have their IPs
 // resolved and made available for pg_hba address expansion via the
-// ${podselector:NAME} syntax.
+// `${podselector:NAME}` syntax.
 type PodSelectorRef struct {
 	// Name is the identifier used to reference this selector in pg_hba rules
 	// via the ${podselector:NAME} syntax in the address field.
@@ -1544,6 +1556,11 @@ type ExtensionConfiguration struct {
 	// The list of directories inside the image which should be added to ld_library_path.
 	// +optional
 	LdLibraryPath []string `json:"ld_library_path,omitempty"`
+
+	// A list of directories within the image to be appended to the
+	// PostgreSQL process's `PATH` environment variable.
+	// +optional
+	BinPath []string `json:"bin_path,omitempty"`
 }
 
 // BootstrapConfiguration contains information about how to create the PostgreSQL
