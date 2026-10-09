@@ -41,7 +41,7 @@
 # Usage:
 #   manage.sh <action>
 #   where <action> can be: create, deploy, load-helper-images,
-#   print-image, export-logs, teardown, pyroscope, env
+#   plugin-barman-cloud, print-image, export-logs, teardown, pyroscope, env
 #
 # Environment Variables:
 #   CLUSTER_ENGINE - Determines the target vendor (default: 'kind')
@@ -74,24 +74,39 @@ source "${COMMON_DIR}/50-utils-images-load.sh"
 ACTION="${1:-}"
 
 if [ -z "$ACTION" ]; then
-    echo "Usage: $0 <create|deploy|load-helper-images|print-image|export-logs|teardown|pyroscope|env>"
+    echo "Usage: $0 <create|deploy|load-helper-images|plugin-barman-cloud|print-image|export-logs|teardown|pyroscope|env>"
     exit 1
 fi
 
 # --- Action Aliases for Backward Compatibility ---
 case "$ACTION" in
     deploy)
-        if [[ "${OPERATOR}" != "local" ]]; then
-            ACTION="deploy-from-manifest"
-        else
-            ACTION="deploy-from-sources"
-        fi
+        case "${CNPG_DEPLOYMENT_METHOD}" in
+            helm)
+                if [[ "${OPERATOR}" != "local" ]]; then
+                    echo "ERROR: Helm deployment is only supported with OPERATOR=local" >&2
+                    exit 1
+                fi
+                ACTION="deploy-from-helm"
+                ;;
+            manifest)
+                if [[ "${OPERATOR}" != "local" ]]; then
+                    ACTION="deploy-from-manifest"
+                else
+                    ACTION="deploy-from-sources"
+                fi
+                ;;
+            *)
+                echo "ERROR: unknown CNPG_DEPLOYMENT_METHOD='${CNPG_DEPLOYMENT_METHOD}'. Expected 'manifest' or 'helm'." >&2
+                exit 1
+                ;;
+        esac
         ;;
 esac
 
 # Ensure registry exists for actions that need it
 case "$ACTION" in
-    create|deploy-from-sources|load-helper-images|pyroscope)
+    create|deploy-from-sources|deploy-from-helm|load-helper-images|pyroscope)
         ensure_registry
         ;;
 esac
@@ -127,6 +142,17 @@ case "$ACTION" in
         deploy_operator_from_source
         ;;
 
+    deploy-from-helm)
+        source "${COMMON_DIR}/20-utils-k8s.sh"
+        CONTROLLER_IMG=${CONTROLLER_IMG:-$(print_image)}
+        if [ -z "$CONTROLLER_IMG" ]; then
+            echo "ERROR: Failed to determine CONTROLLER_IMG" >&2
+            exit 1
+        fi
+        reset_operator_namespace
+        deploy_operator_with_helm
+        ;;
+
     deploy-from-manifest)
         source "${COMMON_DIR}/20-utils-k8s.sh"
         deploy_operator_from_manifest "${OPERATOR}"
@@ -156,6 +182,11 @@ case "$ACTION" in
             echo "ERROR: Log export script not found for vendor '$VENDOR' at: ${EXPORT_SCRIPT}" >&2
             exit 1
         fi
+        ;;
+
+    plugin-barman-cloud)
+        source "${COMMON_DIR}/20-utils-k8s.sh"
+        install_barman_cloud_plugin
         ;;
 
     pyroscope)
@@ -196,7 +227,8 @@ case "$ACTION" in
         echo "CONTROLLER_IMG (default):   $(print_image)"
         echo "POSTGRES_IMG:               ${POSTGRES_IMG}"
         echo "E2E_PRE_ROLLING_UPDATE_IMG: ${E2E_PRE_ROLLING_UPDATE_IMG}"
-        echo "MINIO_IMG:                  ${MINIO_IMG}"
+        echo "RUSTFS_IMG:                 ${RUSTFS_IMG}"
+        echo "AWSCLI_IMG:                 ${AWSCLI_IMG}"
         echo "HELPER_IMGS count:          ${#HELPER_IMGS[@]}"
         echo "TEST_UPGRADE_TO_V1:         ${TEST_UPGRADE_TO_V1}"
 

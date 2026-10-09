@@ -32,12 +32,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/webhook/guard"
 )
 
 // AllowedPgbouncerGenericConfigurationParameters is the list of allowed parameters for PgBouncer
 var AllowedPgbouncerGenericConfigurationParameters = stringset.From([]string{
 	"application_name_add_host",
 	"auth_type",
+	"auth_user",
 	"autodb_idle_timeout",
 	"cancel_wait_timeout",
 	"client_idle_timeout",
@@ -105,6 +107,13 @@ func SetupPoolerWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
+// NewPoolerAdmissionGuard creates a guard to protect a reconciliation loop.
+func NewPoolerAdmissionGuard() *guard.Admission[*apiv1.Pooler] {
+	return &guard.Admission[*apiv1.Pooler]{
+		Validator: newBypassableValidator[*apiv1.Pooler](&PoolerCustomValidator{}),
+	}
+}
+
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
@@ -128,7 +137,7 @@ func (v *PoolerCustomValidator) ValidateCreate(_ context.Context, pooler *apiv1.
 	}
 
 	return nil, apierrors.NewInvalid(
-		schema.GroupKind{Group: "postgresql.cnpg.io", Kind: "Pooler"},
+		schema.GroupKind{Group: apiv1.SchemeGroupVersion.Group, Kind: "Pooler"},
 		pooler.Name, allErrs)
 }
 
@@ -170,7 +179,7 @@ func (v *PoolerCustomValidator) ValidateUpdate(
 	}
 
 	return warns, apierrors.NewInvalid(
-		schema.GroupKind{Group: "postgresql.cnpg.io", Kind: "Pooler"},
+		schema.GroupKind{Group: apiv1.SchemeGroupVersion.Group, Kind: "Pooler"},
 		pooler.Name, allErrs)
 }
 
